@@ -13,6 +13,10 @@ class Chatbot_File_Sync {
         $openai_ok = false;
         $errors = [];
 
+        if (!$api_key_g && !$api_key_o) {
+            $errors[] = 'APIキーが設定されていません（Gemini/OpenAI）';
+        }
+
         // Gemini
         if ($api_key_g) {
             $store = Chatbot_Gemini_File::ensure_store($api_key_g, $set);
@@ -51,6 +55,9 @@ class Chatbot_File_Sync {
         ];
     }
 
+    /**
+     * Delete files on remote providers. Returns error messages for optional caller handling.
+     */
     public static function delete_remote($file) {
         $api_key_g = Chatbot_Settings::get_api_key('gemini');
         $api_key_o = Chatbot_Settings::get_api_key('openai');

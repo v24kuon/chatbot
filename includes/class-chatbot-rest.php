@@ -102,7 +102,7 @@ class Chatbot_REST {
         }
 
         Chatbot_Repository::update_file_status($file_id, 'error');
-        $msg = $upload_result['errors'][0] ?? 'Gemini/OpenAI アップロードに失敗しました';
+        $msg = $upload_result['errors'][0] ?? 'Gemini/OpenAI アップロードに失敗しました（APIキー未設定の可能性があります）';
         return new WP_Error('upload_failed', $msg, ['status' => 500]);
     }
 

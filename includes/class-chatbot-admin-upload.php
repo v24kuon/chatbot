@@ -21,18 +21,41 @@ class Chatbot_Admin_Upload {
             return;
         }
         $sets = Chatbot_Repository::list_knowledge_sets();
-        $msg = '';
-        if (!empty($_GET['uploaded'])) {
-            $msg = __('アップロードを受け付けました（インデックス待ち）', 'chatbot');
-        } elseif (!empty($_GET['error'])) {
-            $msg = sprintf(__('エラー: %s', 'chatbot'), esc_html($_GET['error']));
+        $notices = [];
+        $uploaded = !empty($_GET['uploaded']);
+        $deleted = !empty($_GET['deleted']);
+        $error_msg = sanitize_text_field($_GET['error'] ?? '');
+        $warning_msg = sanitize_text_field($_GET['warning'] ?? '');
+        if ($uploaded) {
+            $notices[] = [
+                'class' => 'notice-info',
+                'text' => __('アップロードを受け付けました（インデックス待ち）', 'chatbot'),
+            ];
+        }
+        if ($deleted) {
+            $notices[] = [
+                'class' => 'notice-info',
+                'text' => __('ファイルを削除しました', 'chatbot'),
+            ];
+        }
+        if ($error_msg) {
+            $notices[] = [
+                'class' => 'notice-error',
+                'text' => sprintf(__('エラー: %s', 'chatbot'), $error_msg),
+            ];
+        }
+        if ($warning_msg) {
+            $notices[] = [
+                'class' => 'notice-warning',
+                'text' => sprintf(__('警告: %s', 'chatbot'), $warning_msg),
+            ];
         }
         ?>
         <div class="wrap">
             <h1><?php esc_html_e('チャットボット資料アップロード', 'chatbot'); ?></h1>
-            <?php if ($msg): ?>
-                <div class="notice notice-info"><p><?php echo esc_html($msg); ?></p></div>
-            <?php endif; ?>
+            <?php foreach ($notices as $notice): ?>
+                <div class="notice <?php echo esc_attr($notice['class']); ?>"><p><?php echo esc_html($notice['text']); ?></p></div>
+            <?php endforeach; ?>
 
             <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" enctype="multipart/form-data">
                 <?php wp_nonce_field('chatbot_upload_file'); ?>
@@ -220,14 +243,22 @@ add_action('admin_post_chatbot_upload_file', function () {
     $file_id = Chatbot_Repository::insert_file($set->id, basename($upload['file']), $upload['file'], $upload['type'], filesize($upload['file']), $checksum);
 
     $upload_result = Chatbot_File_Sync::upload_to_providers($set, $upload['file'], $file_id);
-    if ($upload_result['gemini_ok'] || $upload_result['openai_ok']) {
+    $has_success = ($upload_result['gemini_ok'] || $upload_result['openai_ok']);
+    $has_errors = !empty($upload_result['errors']);
+    if ($has_success) {
         Chatbot_Repository::update_file_status($file_id, 'indexed');
-    } else {
-        Chatbot_Repository::update_file_status($file_id, 'error');
-        $msg = $upload_result['errors'][0] ?? 'Gemini/OpenAI アップロードに失敗しました';
-        wp_redirect(add_query_arg(['page' => 'chatbot-upload', 'error' => rawurlencode($msg)], admin_url('options-general.php')));
+        $args = ['page' => 'chatbot-upload', 'uploaded' => 1];
+        if ($has_errors) {
+            $args['warning'] = rawurlencode(implode(' / ', $upload_result['errors']));
+        }
+        wp_redirect(add_query_arg($args, admin_url('options-general.php')));
         exit;
     }
+
+    Chatbot_Repository::update_file_status($file_id, 'error');
+    $msg = $upload_result['errors'][0] ?? 'Gemini/OpenAI アップロードに失敗しました（APIキー未設定の可能性があります）';
+    wp_redirect(add_query_arg(['page' => 'chatbot-upload', 'error' => rawurlencode($msg)], admin_url('options-general.php')));
+    exit;
 
     wp_redirect(add_query_arg(['page' => 'chatbot-upload', 'uploaded' => 1], admin_url('options-general.php')));
     exit;
@@ -251,7 +282,7 @@ add_action('admin_post_chatbot_delete_file', function () {
         exit;
     }
 
-    Chatbot_File_Sync::delete_remote($file);
+    $remote_errors = Chatbot_File_Sync::delete_remote($file);
 
     if (!empty($file->storage_path) && file_exists($file->storage_path)) {
         @unlink($file->storage_path);
@@ -259,6 +290,10 @@ add_action('admin_post_chatbot_delete_file', function () {
 
     Chatbot_Repository::delete_file_row($file_id);
 
-    wp_redirect(add_query_arg(['page' => 'chatbot-upload', 'deleted' => 1], admin_url('options-general.php')));
+    $redirect_args = ['page' => 'chatbot-upload', 'deleted' => 1];
+    if (!empty($remote_errors)) {
+        $redirect_args['warning'] = rawurlencode(implode(' / ', $remote_errors));
+    }
+    wp_redirect(add_query_arg($redirect_args, admin_url('options-general.php')));
     exit;
 });
