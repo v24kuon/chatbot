@@ -43,7 +43,11 @@
     };
     sendBtn.addEventListener('click', send);
     input.addEventListener('keydown', e => {
-      if (e.key === 'Enter') send();
+      // Avoid sending while IME composition is active (Japanese input).
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      if (e.isComposing) return;
+      send();
     });
   }
 
