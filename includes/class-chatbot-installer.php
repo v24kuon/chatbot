@@ -25,11 +25,29 @@ class Chatbot_Installer {
     public static function uninstall() {
         // リモートファイルのクリーンアップ
         $settings = Chatbot_Settings::get_settings();
-        $files = Chatbot_Repository::list_all_files();
+        $files = [];
+        try {
+            $files = Chatbot_Repository::list_all_files();
+        } catch (\Throwable $e) {
+            error_log('[chatbot] uninstall: list_all_files failed: ' . $e->getMessage());
+        }
+        if (!is_array($files)) {
+            $files = [];
+        }
         foreach ($files as $file) {
-            Chatbot_File_Sync::delete_remote($file);
-            if (!empty($file->storage_path) && file_exists($file->storage_path)) {
-                @unlink($file->storage_path);
+            try {
+                if (class_exists('Chatbot_File_Sync')) {
+                    Chatbot_File_Sync::delete_remote($file);
+                }
+            } catch (\Throwable $e) {
+                error_log('[chatbot] uninstall: delete_remote failed (file_id=' . ($file->id ?? 'n/a') . '): ' . $e->getMessage());
+            }
+            try {
+                if (!empty($file->storage_path) && file_exists($file->storage_path)) {
+                    @unlink($file->storage_path);
+                }
+            } catch (\Throwable $e) {
+                error_log('[chatbot] uninstall: unlink failed (file_id=' . ($file->id ?? 'n/a') . '): ' . $e->getMessage());
             }
         }
 
