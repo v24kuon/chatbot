@@ -1,0 +1,27 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*.log
+*.tmp
+
+# Node / build (念のため)
+node_modules/
+dist/
+build/
+
+# PHP composer
+vendor/
+composer.lock
+
+# WordPress uploads / cache
+wp-content/uploads/
+wp-content/cache/
+
+# IDE
+.idea/
+.vscode/
+
+# Local binaries / artifacts
+bin64/

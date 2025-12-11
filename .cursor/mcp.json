@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "wordpress-handbook": {
+      "url": "https://mcp.digitalcu.be/sse"
+    }
+  }
+}
