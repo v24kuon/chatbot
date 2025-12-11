@@ -36,7 +36,7 @@ class Chatbot_Installer {
             $files = [];
         }
         foreach ($files as $file) {
-            $file_id = (is_object($file) && (isset($file->id) || property_exists($file, 'id'))) ? $file->id : 'n/a';
+            $file_id = (is_object($file) && isset($file->id)) ? $file->id : 'n/a';
             try {
                 if (class_exists('Chatbot_File_Sync')) {
                     Chatbot_File_Sync::delete_remote($file);
