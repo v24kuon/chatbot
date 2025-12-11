@@ -45,9 +45,8 @@
     input.addEventListener('keydown', e => {
       // Avoid sending while IME composition is active (Japanese input).
       if (e.key !== 'Enter') return;
+      if (e.isComposing) return;
       e.preventDefault();
-      const isComposing = e.isComposing || e.key === 'Process';
-      if (isComposing) return;
       send();
     });
   }
