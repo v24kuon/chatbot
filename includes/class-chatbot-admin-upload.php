@@ -21,18 +21,41 @@ class Chatbot_Admin_Upload {
             return;
         }
         $sets = Chatbot_Repository::list_knowledge_sets();
-        $msg = '';
-        if (!empty($_GET['uploaded'])) {
-            $msg = __('アップロードを受け付けました（インデックス待ち）', 'chatbot');
-        } elseif (!empty($_GET['error'])) {
-            $msg = sprintf(__('エラー: %s', 'chatbot'), esc_html($_GET['error']));
+        $notices = [];
+        $uploaded = !empty($_GET['uploaded']);
+        $deleted = !empty($_GET['deleted']);
+        $error_msg = sanitize_text_field($_GET['error'] ?? '');
+        $warning_msg = sanitize_text_field($_GET['warning'] ?? '');
+        if ($uploaded) {
+            $notices[] = [
+                'class' => 'notice-info',
+                'text' => __('アップロードを受け付けました（インデックス待ち）', 'chatbot'),
+            ];
+        }
+        if ($deleted) {
+            $notices[] = [
+                'class' => 'notice-info',
+                'text' => __('ファイルを削除しました', 'chatbot'),
+            ];
+        }
+        if ($error_msg) {
+            $notices[] = [
+                'class' => 'notice-error',
+                'text' => sprintf(__('エラー: %s', 'chatbot'), $error_msg),
+            ];
+        }
+        if ($warning_msg) {
+            $notices[] = [
+                'class' => 'notice-warning',
+                'text' => sprintf(__('警告: %s', 'chatbot'), $warning_msg),
+            ];
         }
         ?>
         <div class="wrap">
             <h1><?php esc_html_e('チャットボット資料アップロード', 'chatbot'); ?></h1>
-            <?php if ($msg): ?>
-                <div class="notice notice-info"><p><?php echo esc_html($msg); ?></p></div>
-            <?php endif; ?>
+            <?php foreach ($notices as $notice): ?>
+                <div class="notice <?php echo esc_attr($notice['class']); ?>"><p><?php echo esc_html($notice['text']); ?></p></div>
+            <?php endforeach; ?>
 
             <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" enctype="multipart/form-data">
                 <?php wp_nonce_field('chatbot_upload_file'); ?>
@@ -213,55 +236,30 @@ add_action('admin_post_chatbot_upload_file', function () {
 
     $upload = wp_handle_upload($file, ['test_form' => false, 'unique_filename_callback' => null]);
     if (isset($upload['error'])) {
-        wp_redirect(add_query_arg(['page' => 'chatbot-upload', 'error' => rawurlencode($upload['error'])], admin_url('options-general.php')));
+        $error_param = sanitize_text_field($upload['error']);
+        wp_redirect(add_query_arg(['page' => 'chatbot-upload', 'error' => $error_param], admin_url('options-general.php')));
         exit;
     }
     $checksum = hash_file('sha256', $upload['file']);
     $file_id = Chatbot_Repository::insert_file($set->id, basename($upload['file']), $upload['file'], $upload['type'], filesize($upload['file']), $checksum);
 
-    $gemini_ok = false;
-    $openai_ok = false;
-
-    // Gemini File Searchへアップロード
-    $settings = Chatbot_Settings::get_settings();
-    $api_key_g = Chatbot_Settings::maybe_decrypt($settings['gemini_api_key'] ?? '');
-    if ($api_key_g) {
-        $store = Chatbot_Gemini_File::ensure_store($api_key_g, $set);
-        if (is_wp_error($store)) {
-            Chatbot_Cron::log_error($file_id, 'Geminiストア作成失敗: ' . $store->get_error_message());
-        } else {
-            $up = Chatbot_Gemini_File::upload_file($api_key_g, $store, $upload['file']);
-            if (is_wp_error($up)) {
-                Chatbot_Cron::log_error($file_id, 'Geminiアップロード失敗: ' . $up->get_error_message());
-            } else {
-                Chatbot_Repository::update_store_name($set->id, $store);
-                Chatbot_Repository::update_remote_file_id($file_id, $up);
-                $gemini_ok = true;
-            }
-        }
-    }
-
-    // OpenAI Files APIへアップロード
-    $api_key_o = Chatbot_Settings::maybe_decrypt($settings['openai_api_key'] ?? '');
-    if ($api_key_o) {
-        $up = Chatbot_OpenAI_File::upload_file($api_key_o, $upload['file']);
-        if (is_wp_error($up)) {
-            Chatbot_Cron::log_error($file_id, 'OpenAIアップロード失敗: ' . $up->get_error_message());
-        } else {
-            Chatbot_Repository::update_remote_file_id_openai($file_id, $up);
-            $openai_ok = true;
-        }
-    }
-
-    if ($gemini_ok || $openai_ok) {
+    $upload_result = Chatbot_File_Sync::upload_to_providers($set, $upload['file'], $file_id);
+    $has_success = ($upload_result['gemini_ok'] || $upload_result['openai_ok']);
+    $has_errors = !empty($upload_result['errors']);
+    if ($has_success) {
         Chatbot_Repository::update_file_status($file_id, 'indexed');
-    } else {
-        Chatbot_Repository::update_file_status($file_id, 'error');
-        wp_redirect(add_query_arg(['page' => 'chatbot-upload', 'error' => rawurlencode('Gemini/OpenAI アップロードに失敗しました')], admin_url('options-general.php')));
+        $args = ['page' => 'chatbot-upload', 'uploaded' => 1];
+        if ($has_errors) {
+            $args['warning'] = implode(' / ', $upload_result['errors']);
+        }
+        wp_redirect(add_query_arg($args, admin_url('options-general.php')));
         exit;
     }
 
-    wp_redirect(add_query_arg(['page' => 'chatbot-upload', 'uploaded' => 1], admin_url('options-general.php')));
+    Chatbot_Repository::update_file_status($file_id, 'error');
+    $msg = $upload_result['errors'][0] ?? 'Gemini/OpenAI アップロードに失敗しました（APIキー未設定の可能性があります）';
+    $msg = sanitize_text_field($msg);
+    wp_redirect(add_query_arg(['page' => 'chatbot-upload', 'error' => $msg], admin_url('options-general.php')));
     exit;
 });
 
@@ -283,23 +281,7 @@ add_action('admin_post_chatbot_delete_file', function () {
         exit;
     }
 
-    $settings = Chatbot_Settings::get_settings();
-    $api_key_g = Chatbot_Settings::maybe_decrypt($settings['gemini_api_key'] ?? '');
-    $api_key_o = Chatbot_Settings::maybe_decrypt($settings['openai_api_key'] ?? '');
-
-    if ($api_key_g && !empty($file->remote_file_id)) {
-        $res = Chatbot_Gemini_File::delete_file($api_key_g, $file->remote_file_id);
-        if (is_wp_error($res)) {
-            Chatbot_Cron::log_error($file_id, 'Gemini削除失敗: ' . $res->get_error_message());
-        }
-    }
-
-    if ($api_key_o && !empty($file->remote_file_id_openai)) {
-        $res = Chatbot_OpenAI_File::delete_file($api_key_o, $file->remote_file_id_openai);
-        if (is_wp_error($res)) {
-            Chatbot_Cron::log_error($file_id, 'OpenAI削除失敗: ' . $res->get_error_message());
-        }
-    }
+    $remote_errors = Chatbot_File_Sync::delete_remote($file);
 
     if (!empty($file->storage_path) && file_exists($file->storage_path)) {
         @unlink($file->storage_path);
@@ -307,6 +289,10 @@ add_action('admin_post_chatbot_delete_file', function () {
 
     Chatbot_Repository::delete_file_row($file_id);
 
-    wp_redirect(add_query_arg(['page' => 'chatbot-upload', 'deleted' => 1], admin_url('options-general.php')));
+    $redirect_args = ['page' => 'chatbot-upload', 'deleted' => 1];
+    if (!empty($remote_errors)) {
+        $redirect_args['warning'] = rawurlencode(implode(' / ', $remote_errors));
+    }
+    wp_redirect(add_query_arg($redirect_args, admin_url('options-general.php')));
     exit;
 });

@@ -94,48 +94,16 @@ class Chatbot_REST {
         $checksum = hash_file('sha256', $upload['file']);
         $file_id = Chatbot_Repository::insert_file($set->id, basename($upload['file']), $upload['file'], $upload['type'], filesize($upload['file']), $checksum);
 
-        $gemini_ok = false;
-        $openai_ok = false;
+        $upload_result = Chatbot_File_Sync::upload_to_providers($set, $upload['file'], $file_id);
 
-        $settings = Chatbot_Settings::get_settings();
-
-        // Gemini File Searchへアップロード
-        $api_key_g = Chatbot_Settings::maybe_decrypt($settings['gemini_api_key'] ?? '');
-        if ($api_key_g) {
-            $store = Chatbot_Gemini_File::ensure_store($api_key_g, $set);
-            if (is_wp_error($store)) {
-                Chatbot_Cron::log_error($file_id, 'Geminiストア作成失敗: ' . $store->get_error_message());
-            } else {
-                $up = Chatbot_Gemini_File::upload_file($api_key_g, $store, $upload['file']);
-                if (is_wp_error($up)) {
-                    Chatbot_Cron::log_error($file_id, 'Geminiアップロード失敗: ' . $up->get_error_message());
-                } else {
-                    Chatbot_Repository::update_store_name($set->id, $store);
-                    Chatbot_Repository::update_remote_file_id($file_id, $up);
-                    $gemini_ok = true;
-                }
-            }
-        }
-
-        // OpenAI Files APIへアップロード
-        $api_key_o = Chatbot_Settings::maybe_decrypt($settings['openai_api_key'] ?? '');
-        if ($api_key_o) {
-            $up = Chatbot_OpenAI_File::upload_file($api_key_o, $upload['file']);
-            if (is_wp_error($up)) {
-                Chatbot_Cron::log_error($file_id, 'OpenAIアップロード失敗: ' . $up->get_error_message());
-            } else {
-                Chatbot_Repository::update_remote_file_id_openai($file_id, $up);
-                $openai_ok = true;
-            }
-        }
-
-        if ($gemini_ok || $openai_ok) {
+        if ($upload_result['gemini_ok'] || $upload_result['openai_ok']) {
             Chatbot_Repository::update_file_status($file_id, 'indexed');
             return ['id' => $file_id, 'status' => 'indexed'];
         }
 
         Chatbot_Repository::update_file_status($file_id, 'error');
-        return new WP_Error('upload_failed', 'Gemini/OpenAI アップロードに失敗しました', ['status' => 500]);
+        $msg = $upload_result['errors'][0] ?? 'Gemini/OpenAI アップロードに失敗しました（APIキー未設定の可能性があります）';
+        return new WP_Error('upload_failed', $msg, ['status' => 500]);
     }
 
     public static function chat(\WP_REST_Request $req) {

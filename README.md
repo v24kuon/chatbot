@@ -23,4 +23,5 @@ WordPress 用の資料ベースQAチャットボットプラグイン。ショ�
    - `[my_chatbot layout="inline" dataset="your_dataset_slug"]`
 
 ## 削除時
-- プラグイン削除（アンインストール）でリモートファイル（Gemini / OpenAI）とローカルファイル、DBテーブルをクリーンアップします。
+- 管理画面削除: リモートファイル（Gemini / OpenAI）とローカル、DB行を削除。
+- プラグイン削除（アンインストール）: すべてのリモートファイル（Gemini / OpenAI）、ローカル、DBテーブルをクリーンアップします。

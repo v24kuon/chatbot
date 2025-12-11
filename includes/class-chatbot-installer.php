@@ -25,23 +25,9 @@ class Chatbot_Installer {
     public static function uninstall() {
         // リモートファイルのクリーンアップ
         $settings = Chatbot_Settings::get_settings();
-        $key_g = Chatbot_Settings::maybe_decrypt($settings['gemini_api_key'] ?? '');
-        $key_o = Chatbot_Settings::maybe_decrypt($settings['openai_api_key'] ?? '');
-
         $files = Chatbot_Repository::list_all_files();
         foreach ($files as $file) {
-            if ($key_g && !empty($file->remote_file_id)) {
-                $res = Chatbot_Gemini_File::delete_file($key_g, $file->remote_file_id);
-                if (is_wp_error($res)) {
-                    // ログは残さず静かにスキップ
-                }
-            }
-            if ($key_o && !empty($file->remote_file_id_openai)) {
-                $res = Chatbot_OpenAI_File::delete_file($key_o, $file->remote_file_id_openai);
-                if (is_wp_error($res)) {
-                    // 同上
-                }
-            }
+            Chatbot_File_Sync::delete_remote($file);
             if (!empty($file->storage_path) && file_exists($file->storage_path)) {
                 @unlink($file->storage_path);
             }

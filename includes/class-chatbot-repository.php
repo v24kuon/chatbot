@@ -235,6 +235,12 @@ class Chatbot_Repository {
         return $wpdb->get_results("SELECT * FROM {$table}");
     }
 
+    public static function get_latest_openai_file($set_id) {
+        global $wpdb;
+        $files = self::get_table('knowledge_files');
+        return $wpdb->get_row($wpdb->prepare("SELECT * FROM {$files} WHERE knowledge_set_id = %d AND remote_file_id_openai IS NOT NULL ORDER BY id DESC LIMIT 1", $set_id));
+    }
+
     public static function list_pending_files($limit = 20) {
         global $wpdb;
         $f = self::get_table('knowledge_files');

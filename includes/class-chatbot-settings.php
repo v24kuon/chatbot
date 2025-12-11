@@ -225,6 +225,17 @@ class Chatbot_Settings {
         return $dec !== false ? $dec : $value;
     }
 
+    public static function get_api_key($provider) {
+        $settings = self::get_settings();
+        if ($provider === 'gemini') {
+            return self::maybe_decrypt($settings['gemini_api_key'] ?? '');
+        }
+        if ($provider === 'openai') {
+            return self::maybe_decrypt($settings['openai_api_key'] ?? '');
+        }
+        return '';
+    }
+
     private static function mask($value) {
         if (empty($value)) {
             return '';

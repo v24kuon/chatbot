@@ -49,9 +49,8 @@ class Chatbot_RAG {
     }
 
     private static function synthesize_answer($question, $set) {
-        $settings = Chatbot_Settings::get_settings();
-        $key_g = Chatbot_Settings::maybe_decrypt($settings['gemini_api_key'] ?? '');
-        $key_o = Chatbot_Settings::maybe_decrypt($settings['openai_api_key'] ?? '');
+        $key_g = Chatbot_Settings::get_api_key('gemini');
+        $key_o = Chatbot_Settings::get_api_key('openai');
 
         // 優先: Gemini File Search (store_name & remote_file_id)
         if ($key_g && !empty($set->store_name)) {
@@ -66,7 +65,7 @@ class Chatbot_RAG {
         // 次点: OpenAI Responses API + attachments (file_id)
         if ($key_o && !empty($set->id)) {
             // ファイルIDの中から最新のOpenAI file_idを拾う
-            $file = self::get_latest_openai_file($set->id);
+            $file = Chatbot_Repository::get_latest_openai_file($set->id);
             if ($file && !empty($file->remote_file_id_openai)) {
                 $system_msg = "You are a retrieval QA bot. Answer only from the attached file. If the answer is not in the file, reply: 資料に記載がないためお答えできません。";
                 $user_msg = $question;
@@ -178,12 +177,6 @@ class Chatbot_RAG {
         }
 
         return ['answer' => self::fallback_answer('', []), 'provider' => 'local', 'model' => null];
-    }
-
-    private static function get_latest_openai_file($set_id) {
-        global $wpdb;
-        $files = Chatbot_Repository::get_table('knowledge_files');
-        return $wpdb->get_row($wpdb->prepare("SELECT * FROM {$files} WHERE knowledge_set_id = %d AND remote_file_id_openai IS NOT NULL ORDER BY id DESC LIMIT 1", $set_id));
     }
 
     private static function fallback_answer($question, array $chunks) {
