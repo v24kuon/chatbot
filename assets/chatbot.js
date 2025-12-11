@@ -44,11 +44,11 @@
     sendBtn.addEventListener('click', send);
     input.addEventListener('keydown', e => {
       // Avoid sending while IME composition is active (Japanese input).
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
       const isComposing = e.isComposing || e.key === 'Process';
-      if (e.key === 'Enter' && !isComposing) {
-        e.preventDefault();
-        send();
-      }
+      if (isComposing) return;
+      send();
     });
   }
 
