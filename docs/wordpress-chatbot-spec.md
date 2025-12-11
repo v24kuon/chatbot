@@ -85,7 +85,7 @@ flowchart TD
 - **ファイル管理 / アップロード**
   - 資料セットを選択、または新規作成してファイルをアップロード（対応拡張子: pdf, txt, md）。
   - アップロード時に Gemini File Search ストアを作成し、ファイルをアップロードして `remote_file_id` を保存。OpenAI Files へもアップロードし `remote_file_id_openai` を保存。いずれか成功で `indexed`。両方失敗で `error` とエラーログ。
-  - 一覧とデバッグ: 状態（pending/indexed/error）、Cron予定、pdftotext実行可否、エラーログを表示。
+  - 一覧: 状態（pending/indexed/error）と削除操作（リモート/ローカル/DB削除）。
   - 削除: 一覧から削除実行で、Gemini / OpenAI のリモートファイルとローカルファイルを削除し、DB行も削除。
 
 - **チャットログ一覧**
@@ -162,16 +162,7 @@ flowchart TD
 
 ---
 
-### 8. 次ステップ（実装準備のためのアウトプット）
-- アーキテクチャ図（詳細版）
-- ER風データ定義（カラム型付き）
-- ショートコード属性リファレンスとサンプル
-- 管理画面ワイヤー項目
-- プロンプト雛形と未回答判定ルール
-
----
-
-### 9. 実装詳細ポリシー
+### 8. 実装詳細ポリシー
 
 - APIキー管理
   - 優先順: 定数/環境変数 (`WP_GEMINI_API_KEY`, `WP_OPENAI_API_KEY`) → wp_options に暗号化保存（OpenSSL + AUTH_KEY/SALT）。保存時にマスキング表示。

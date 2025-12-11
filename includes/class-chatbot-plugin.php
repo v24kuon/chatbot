@@ -19,6 +19,7 @@ require_once CHATBOT_PLUGIN_DIR . 'includes/class-chatbot-admin-logs.php';
 require_once CHATBOT_PLUGIN_DIR . 'includes/class-chatbot-admin-upload.php';
 require_once CHATBOT_PLUGIN_DIR . 'includes/class-chatbot-gemini-file.php';
 require_once CHATBOT_PLUGIN_DIR . 'includes/class-chatbot-openai-file.php';
+require_once CHATBOT_PLUGIN_DIR . 'includes/class-chatbot-file-sync.php';
 
 class Chatbot_Plugin {
     private static $instance = null;
