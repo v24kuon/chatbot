@@ -259,9 +259,6 @@ add_action('admin_post_chatbot_upload_file', function () {
     $msg = $upload_result['errors'][0] ?? 'Gemini/OpenAI アップロードに失敗しました（APIキー未設定の可能性があります）';
     wp_redirect(add_query_arg(['page' => 'chatbot-upload', 'error' => rawurlencode($msg)], admin_url('options-general.php')));
     exit;
-
-    wp_redirect(add_query_arg(['page' => 'chatbot-upload', 'uploaded' => 1], admin_url('options-general.php')));
-    exit;
 });
 
 add_action('admin_post_chatbot_delete_file', function () {
