@@ -46,7 +46,10 @@ class Chatbot_Installer {
             }
             try {
                 if (!empty($file->storage_path) && file_exists($file->storage_path)) {
-                    unlink($file->storage_path);
+                    $removed = @unlink($file->storage_path);
+                    if ($removed === false) {
+                        error_log('[chatbot] uninstall: unlink failed (file_id=' . $file_id . ', path=' . $file->storage_path . ')');
+                    }
                 }
             } catch (\Throwable $e) {
                 error_log('[chatbot] uninstall: unlink failed (file_id=' . $file_id . '): ' . $e->getMessage());
