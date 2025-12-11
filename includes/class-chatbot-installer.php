@@ -27,7 +27,14 @@ class Chatbot_Installer {
         $settings = Chatbot_Settings::get_settings();
         $files = [];
         try {
-            $files = Chatbot_Repository::list_all_files();
+            global $wpdb;
+            $table_files = Chatbot_Repository::get_table('knowledge_files');
+            $table_exists = ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table_files)) === $table_files);
+            if ($table_exists) {
+                $files = Chatbot_Repository::list_all_files();
+            } else {
+                error_log('[chatbot] uninstall: skip list_all_files because table missing: ' . $table_files);
+            }
         } catch (\Throwable $e) {
             error_log('[chatbot] uninstall: list_all_files failed: ' . $e->getMessage());
         }
