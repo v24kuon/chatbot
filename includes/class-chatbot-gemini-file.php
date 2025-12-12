@@ -81,9 +81,10 @@ class Chatbot_Gemini_File {
     }
 
     public static function delete_file($api_key, $file_id) {
-        // ドキュメントの仕様に基づく削除エンドポイント（:delete）
-        $url = self::BASE . '/v1beta/' . rawurlencode($file_id) . ':delete?key=' . urlencode($api_key);
-        $resp = wp_remote_post($url, [
+        // Google Generative Language API は DELETE メソッドを要求
+        $url = self::BASE . '/v1beta/' . rawurlencode($file_id) . '?key=' . urlencode($api_key);
+        $resp = wp_remote_request($url, [
+            'method' => 'DELETE',
             'timeout' => 20,
         ]);
         if (is_wp_error($resp)) {
