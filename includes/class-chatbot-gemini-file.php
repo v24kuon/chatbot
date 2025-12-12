@@ -19,14 +19,13 @@ class Chatbot_Gemini_File {
             return $set->store_name;
         }
         $name = 'store-' . sanitize_title($set->slug);
-        $url = self::BASE . '/v1beta/fileSearchStores';
+        $url = self::BASE . '/v1beta/fileSearchStores?key=' . urlencode($api_key);
         $payload = [
             'display_name' => $name,
         ];
         $resp = wp_remote_post($url, [
             'headers' => [
                 'Content-Type' => 'application/json',
-                'Authorization' => 'Bearer ' . $api_key,
             ],
             'body' => wp_json_encode($payload),
             'timeout' => 30,
@@ -49,7 +48,7 @@ class Chatbot_Gemini_File {
         if (!file_exists($file_path)) {
             return new WP_Error('upload', 'file not found');
         }
-        $url = self::BASE . '/v1beta/' . rawurlencode($store_name) . ':upload';
+        $url = self::BASE . '/v1beta/' . rawurlencode($store_name) . ':upload?key=' . urlencode($api_key);
 
         $boundary = wp_generate_uuid4();
         $file_contents = file_get_contents($file_path);
@@ -63,7 +62,6 @@ class Chatbot_Gemini_File {
 
         $resp = wp_remote_post($url, [
             'headers' => [
-                'Authorization' => 'Bearer ' . $api_key,
                 'Content-Type' => 'multipart/form-data; boundary=' . $boundary,
             ],
             'body' => $body,
@@ -84,11 +82,8 @@ class Chatbot_Gemini_File {
 
     public static function delete_file($api_key, $file_id) {
         // ドキュメントの仕様に基づく削除エンドポイント（:delete）
-        $url = self::BASE . '/v1beta/' . rawurlencode($file_id) . ':delete';
+        $url = self::BASE . '/v1beta/' . rawurlencode($file_id) . ':delete?key=' . urlencode($api_key);
         $resp = wp_remote_post($url, [
-            'headers' => [
-                'Authorization' => 'Bearer ' . $api_key,
-            ],
             'timeout' => 20,
         ]);
         if (is_wp_error($resp)) {
