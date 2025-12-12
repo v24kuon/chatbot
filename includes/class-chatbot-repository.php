@@ -50,51 +50,10 @@ class Chatbot_Repository {
         return $wpdb->insert_id;
     }
 
-    public static function pending_files($limit = 3) {
-        global $wpdb;
-        $table = self::get_table('knowledge_files');
-        return $wpdb->get_results($wpdb->prepare("SELECT * FROM {$table} WHERE status = %s ORDER BY created_at ASC LIMIT %d", 'pending', intval($limit)));
-    }
-
     public static function update_file_status($id, $status) {
         global $wpdb;
         $table = self::get_table('knowledge_files');
         $wpdb->update($table, ['status' => $status, 'updated_at' => current_time('mysql')], ['id' => $id]);
-    }
-
-    public static function insert_chunk($file_id, $set_id, $index, $content, $token_count) {
-        global $wpdb;
-        $table = self::get_table('knowledge_chunks');
-        $wpdb->insert($table, [
-            'knowledge_file_id' => $file_id,
-            'knowledge_set_id' => $set_id,
-            'chunk_index' => $index,
-            'content' => $content,
-            'token_count' => $token_count,
-            'embedding_status' => 'pending',
-            'created_at' => current_time('mysql'),
-        ]);
-        return $wpdb->insert_id;
-    }
-
-    public static function insert_embedding($chunk_id, $set_id, $dimension, array $vector, $provider = 'local') {
-        global $wpdb;
-        $table = self::get_table('knowledge_embeddings');
-        $wpdb->insert($table, [
-            'knowledge_chunk_id' => $chunk_id,
-            'knowledge_set_id' => $set_id,
-            'dimension' => $dimension,
-            'vector' => wp_json_encode($vector),
-            'provider' => $provider,
-            'created_at' => current_time('mysql'),
-        ]);
-        return $wpdb->insert_id;
-    }
-
-    public static function get_embeddings_by_set($set_id, $limit = 200) {
-        global $wpdb;
-        $table = self::get_table('knowledge_embeddings');
-        return $wpdb->get_results($wpdb->prepare("SELECT * FROM {$table} WHERE knowledge_set_id = %d ORDER BY id DESC LIMIT %d", $set_id, intval($limit)));
     }
 
     public static function get_messages($set_slug = '', $unanswered_only = 0, $limit = 50) {
@@ -239,33 +198,6 @@ class Chatbot_Repository {
         global $wpdb;
         $files = self::get_table('knowledge_files');
         return $wpdb->get_row($wpdb->prepare("SELECT * FROM {$files} WHERE knowledge_set_id = %d AND remote_file_id_openai IS NOT NULL ORDER BY id DESC LIMIT 1", $set_id));
-    }
-
-    public static function list_pending_files($limit = 20) {
-        global $wpdb;
-        $f = self::get_table('knowledge_files');
-        $ks = self::get_table('knowledge_sets');
-        $sql = "
-            SELECT f.*, ks.name as set_name, ks.slug as set_slug
-            FROM {$f} f
-            INNER JOIN {$ks} ks ON ks.id = f.knowledge_set_id
-            WHERE f.status = %s
-            ORDER BY f.id DESC
-            LIMIT %d
-        ";
-        return $wpdb->get_results($wpdb->prepare($sql, 'pending', intval($limit)));
-    }
-
-    public static function count_files_by_status() {
-        global $wpdb;
-        $f = self::get_table('knowledge_files');
-        $sql = "SELECT status, COUNT(*) as cnt FROM {$f} GROUP BY status";
-        $rows = $wpdb->get_results($sql);
-        $out = [];
-        foreach ($rows as $r) {
-            $out[$r->status] = intval($r->cnt);
-        }
-        return $out;
     }
 
     public static function get_or_create_session($session_key, $set_id, $page_url) {
