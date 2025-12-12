@@ -6,8 +6,9 @@ if (!defined('ABSPATH')) {
 
 /**
  * Gemini File Search 連携ヘルパー（簡易実装）。
- * - ストア作成: POST /v1beta/fileSearchStores
- * - ストアへのアップロード: POST /v1beta/fileSearchStores/{store}/files:upload
+ * - ストア作成: POST /v1beta/fileSearchStores?key=API_KEY
+ * - ストアへのアップロード: POST /upload/v1beta/{fileSearchStoreName=fileSearchStores/*}:uploadToFileSearchStore?key=API_KEY
+ * - ファイル削除: DELETE /v1beta/{fileSearchStores/*/documents/*}?key=API_KEY
  *
  * 注意: エンドポイント仕様は公式ドキュメントに準拠。失敗時はエラーメッセージを返すのみ。
  */
@@ -20,13 +21,13 @@ class Chatbot_Gemini_File {
         }
         $name = 'store-' . sanitize_title($set->slug);
         $url = self::BASE . '/v1beta/fileSearchStores';
+        $url = add_query_arg('key', $api_key, $url);
         $payload = [
             'display_name' => $name,
         ];
         $resp = wp_remote_post($url, [
             'headers' => [
                 'Content-Type' => 'application/json',
-                'Authorization' => 'Bearer ' . $api_key,
             ],
             'body' => wp_json_encode($payload),
             'timeout' => 30,
@@ -49,10 +50,17 @@ class Chatbot_Gemini_File {
         if (!file_exists($file_path)) {
             return new WP_Error('upload', 'file not found');
         }
-        $url = self::BASE . '/v1beta/' . rawurlencode($store_name) . ':upload';
+        // リソース名のセグメントごとにエンコードし、スラッシュを維持
+        $resource = ltrim($store_name, '/');
+        $resource = implode('/', array_map('rawurlencode', explode('/', $resource)));
+        $url = self::BASE . '/upload/v1beta/' . $resource . ':uploadToFileSearchStore';
+        $url = add_query_arg('key', $api_key, $url);
 
         $boundary = wp_generate_uuid4();
         $file_contents = file_get_contents($file_path);
+        if ($file_contents === false) {
+            return new WP_Error('gemini_upload', 'failed to read file');
+        }
         $filename = basename($file_path);
 
         $body = "--{$boundary}\r\n";
@@ -63,7 +71,6 @@ class Chatbot_Gemini_File {
 
         $resp = wp_remote_post($url, [
             'headers' => [
-                'Authorization' => 'Bearer ' . $api_key,
                 'Content-Type' => 'multipart/form-data; boundary=' . $boundary,
             ],
             'body' => $body,
@@ -82,15 +89,20 @@ class Chatbot_Gemini_File {
         return new WP_Error('gemini_upload', $msg);
     }
 
+    /**
+     * Delete a file by full resource name (fileSearchStores/{store_id}/documents/{doc_id}).
+     *
+     * @param string $api_key API key for Gemini File Search.
+     * @param string $file_id Full resource name: fileSearchStores/*/documents/*.
+     * @return true|WP_Error
+     */
     public static function delete_file($api_key, $file_id) {
-        // ドキュメントの仕様に基づく削除エンドポイント（:delete）
-        $url = self::BASE . '/v1beta/' . rawurlencode($file_id) . ':delete';
-        $resp = wp_remote_post($url, [
-            'headers' => [
-                'Authorization' => 'Bearer ' . $api_key,
-            ],
-            'timeout' => 20,
-        ]);
+        // Google Generative Language API は DELETE メソッドを要求
+        $resource = ltrim($file_id, '/');
+        $resource = implode('/', array_map('rawurlencode', explode('/', $resource)));
+        $url = self::BASE . '/v1beta/' . $resource;
+        $url = add_query_arg('key', $api_key, $url);
+        $resp = wp_remote_request($url, ['method' => 'DELETE', 'timeout' => 20]);
         if (is_wp_error($resp)) {
             return $resp;
         }
