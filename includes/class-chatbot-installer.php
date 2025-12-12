@@ -5,7 +5,7 @@ if (!defined('ABSPATH')) {
 }
 
 class Chatbot_Installer {
-    const DB_VERSION = '0.1.0';
+    const DB_VERSION = '0.1.1';
 
     public static function install() {
         self::create_tables();
