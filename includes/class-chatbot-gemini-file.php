@@ -8,7 +8,7 @@ if (!defined('ABSPATH')) {
  * Gemini File Search 連携ヘルパー（簡易実装）。
  * - ストア作成: POST /v1beta/fileSearchStores?key=API_KEY
  * - ストアへのアップロード: POST /upload/v1beta/{fileSearchStoreName=fileSearchStores/*}:uploadToFileSearchStore?key=API_KEY
- * - ファイル削除: DELETE /v1beta/{fileSearchStores/*/files/*}?key=API_KEY
+ * - ファイル削除: DELETE /v1beta/{fileSearchStores/*/documents/*}?key=API_KEY
  *
  * 注意: エンドポイント仕様は公式ドキュメントに準拠。失敗時はエラーメッセージを返すのみ。
  */
@@ -89,6 +89,13 @@ class Chatbot_Gemini_File {
         return new WP_Error('gemini_upload', $msg);
     }
 
+    /**
+     * Delete a file by full resource name (fileSearchStores/{store_id}/documents/{doc_id}).
+     *
+     * @param string $api_key API key for Gemini File Search.
+     * @param string $file_id Full resource name: fileSearchStores/*/documents/*.
+     * @return true|WP_Error
+     */
     public static function delete_file($api_key, $file_id) {
         // Google Generative Language API は DELETE メソッドを要求
         $resource = ltrim($file_id, '/');
