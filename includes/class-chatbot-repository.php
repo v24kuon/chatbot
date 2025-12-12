@@ -58,8 +58,8 @@ class Chatbot_Repository {
 
     public static function get_messages($set_slug = '', $unanswered_only = 0, $limit = 50) {
         global $wpdb;
-        $m = self::get_table('chatbot_messages');
-        $s = self::get_table('chatbot_sessions');
+        $m = self::get_table('messages');
+        $s = self::get_table('sessions');
         $ks = self::get_table('knowledge_sets');
 
         $where = [];
@@ -88,7 +88,7 @@ class Chatbot_Repository {
 
     public static function log_message($session_id, $role, $question, $answer, $set_id, $manual_id, $provider, $model, $answered_from_context, $unanswered_flag, $rate_limited, $prompt_tokens = null, $completion_tokens = null, $latency_ms = null) {
         global $wpdb;
-        $table = self::get_table('chatbot_messages');
+        $table = self::get_table('messages');
         $wpdb->insert($table, [
             'chat_session_id' => $session_id,
             'role' => $role,
@@ -202,7 +202,7 @@ class Chatbot_Repository {
 
     public static function get_or_create_session($session_key, $set_id, $page_url) {
         global $wpdb;
-        $table = self::get_table('chatbot_sessions');
+        $table = self::get_table('sessions');
         $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$table} WHERE session_key = %s", $session_key));
         if ($row) {
             return $row->id;
