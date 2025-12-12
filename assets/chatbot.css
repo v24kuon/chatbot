@@ -1,15 +1,298 @@
-.chatbot-container { position: relative; font-family: sans-serif; }
-.chatbot-container.layout-floating { position: fixed; right: 16px; bottom: 16px; z-index: 9999; }
-.chatbot-container .chatbot-window { display: none; width: 320px; max-width: 90vw; background: #fff; border: 1px solid #ccc; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
-.chatbot-container.open .chatbot-window { display: block; }
-.chatbot-container .chatbot-toggle { background: #007cba; color: #fff; border: none; border-radius: 50%; width: 56px; height: 56px; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
-.chatbot-messages { max-height: 300px; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
-.chatbot-input { display: flex; gap: 8px; padding: 8px 12px 12px; }
-.chatbot-input input { flex: 1; padding: 8px; }
-.chatbot-input .send { padding: 8px 12px; }
-.msg { padding: 8px 10px; border-radius: 6px; }
-.msg.user { align-self: flex-end; background: #e6f2ff; }
-.msg.bot { align-self: flex-start; background: #f4f4f4; }
-.theme-dark .chatbot-window { background: #1f1f1f; color: #f5f5f5; border-color: #444; }
-.theme-dark .msg.bot { background: #2a2a2a; }
-.theme-dark .msg.user { background: #0f4c81; color: #fff; }
+/* ==========================================================================
+   Gemini Chatbot - フレンドリー + ピル型 + ニューモーフィック デザイン
+   ========================================================================== */
+
+/* カスタムプロパティ（テーマカラー） */
+.gemini-chatbot {
+  --chat-bg: #e8eef3;
+  --chat-shadow-light: #ffffff;
+  --chat-shadow-dark: #c5cdd6;
+  --chat-accent: #5b8def;
+  --chat-accent-hover: #4a7cd9;
+  --chat-text: #3d4f5f;
+  --chat-text-light: #7a8a99;
+  --chat-user-bg: #5b8def;
+  --chat-user-text: #ffffff;
+  --chat-bot-bg: #f5f8fa;
+  --chat-bot-text: #3d4f5f;
+  --chat-radius: 24px;
+  --chat-radius-sm: 16px;
+}
+
+/* コンテナ */
+.gemini-chatbot {
+  max-width: 480px;
+  padding: 16px;
+  background: var(--chat-bg);
+  border-radius: var(--chat-radius);
+  box-shadow:
+    8px 8px 16px var(--chat-shadow-dark),
+    -8px -8px 16px var(--chat-shadow-light);
+  font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* ==========================================================================
+   チャットログ
+   ========================================================================== */
+.gemini-chatbot .chat-log {
+  height: 320px;
+  overflow-y: auto;
+  padding: 16px;
+  margin-bottom: 16px;
+  background: var(--chat-bg);
+  border-radius: var(--chat-radius-sm);
+  box-shadow:
+    inset 4px 4px 8px var(--chat-shadow-dark),
+    inset -4px -4px 8px var(--chat-shadow-light);
+  border: none;
+}
+
+/* スクロールバーのスタイル */
+.gemini-chatbot .chat-log::-webkit-scrollbar {
+  width: 6px;
+}
+
+.gemini-chatbot .chat-log::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.gemini-chatbot .chat-log::-webkit-scrollbar-thumb {
+  background: var(--chat-shadow-dark);
+  border-radius: 3px;
+}
+
+/* ==========================================================================
+   メッセージ吹き出し
+   ========================================================================== */
+.gemini-chatbot .chat-row {
+  margin-bottom: 12px;
+  line-height: 1.6;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  animation: chatFadeIn 0.3s ease-out;
+}
+
+@keyframes chatFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ユーザーメッセージ */
+.gemini-chatbot .chat-row.user {
+  flex-direction: row-reverse;
+  text-align: right;
+}
+
+.gemini-chatbot .chat-row.user .chat-bubble {
+  background: var(--chat-user-bg);
+  color: var(--chat-user-text);
+  border-radius: 16px 16px 4px 16px;
+  padding: 10px 14px;
+  max-width: 80%;
+  box-shadow:
+    3px 3px 6px var(--chat-shadow-dark),
+    -2px -2px 4px var(--chat-shadow-light);
+}
+
+/* ボットメッセージ */
+.gemini-chatbot .chat-row.bot {
+  flex-direction: row;
+  text-align: left;
+}
+
+.gemini-chatbot .chat-row.bot .chat-bubble {
+  background: var(--chat-bot-bg);
+  color: var(--chat-bot-text);
+  border-radius: 16px 16px 16px 4px;
+  padding: 10px 14px;
+  max-width: 80%;
+  box-shadow:
+    3px 3px 6px var(--chat-shadow-dark),
+    -2px -2px 4px var(--chat-shadow-light);
+}
+
+/* アバターアイコン */
+.gemini-chatbot .chat-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: min(18px, 100%);
+  flex-shrink: 0;
+  box-shadow:
+    2px 2px 4px var(--chat-shadow-dark),
+    -2px -2px 4px var(--chat-shadow-light);
+}
+
+.gemini-chatbot .chat-row.user .chat-avatar {
+  background: var(--chat-user-bg);
+  color: var(--chat-user-text);
+}
+
+.gemini-chatbot .chat-row.bot .chat-avatar {
+  background: var(--chat-bot-bg);
+  color: var(--chat-accent);
+}
+
+/* ==========================================================================
+   ローディングアニメーション（タイピングインジケーター）
+   ========================================================================== */
+.gemini-chatbot .chat-row.typing {
+  flex-direction: row;
+}
+
+.gemini-chatbot .typing-indicator {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 16px;
+  background: var(--chat-bot-bg);
+  border-radius: 16px 16px 16px 4px;
+  box-shadow:
+    3px 3px 6px var(--chat-shadow-dark),
+    -2px -2px 4px var(--chat-shadow-light);
+}
+
+.gemini-chatbot .typing-indicator span {
+  width: 6px;
+  height: 6px;
+  background: var(--chat-accent);
+  border-radius: 50%;
+  animation: typingBounce 1.4s ease-in-out infinite;
+}
+
+.gemini-chatbot .typing-indicator span:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.gemini-chatbot .typing-indicator span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.gemini-chatbot .typing-indicator span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes typingBounce {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-6px);
+    opacity: 1;
+  }
+}
+
+/* ==========================================================================
+   入力エリア（ピル型 + ニューモーフィック）
+   ========================================================================== */
+.gemini-chatbot .chat-input {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+/* テキスト入力欄 */
+.gemini-chatbot .chat-input input.chat-question {
+  flex: 1;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 50px;
+  background: var(--chat-bg);
+  color: var(--chat-text);
+  font-size: 13px;
+  box-shadow:
+    inset 4px 4px 8px var(--chat-shadow-dark),
+    inset -4px -4px 8px var(--chat-shadow-light);
+  transition: box-shadow 0.2s ease;
+  outline: none;
+}
+
+.gemini-chatbot .chat-input input.chat-question::placeholder {
+  color: var(--chat-text-light);
+}
+
+.gemini-chatbot .chat-input input.chat-question:focus {
+  box-shadow:
+    inset 4px 4px 8px var(--chat-shadow-dark),
+    inset -4px -4px 8px var(--chat-shadow-light),
+    0 0 0 2px var(--chat-accent);
+}
+
+.gemini-chatbot .chat-input input.chat-question:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* 送信ボタン */
+.gemini-chatbot .chat-input button.chat-send {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--chat-bg);
+  color: var(--chat-accent);
+  font-size: 16px;
+  cursor: pointer;
+  box-shadow:
+    4px 4px 8px var(--chat-shadow-dark),
+    -4px -4px 8px var(--chat-shadow-light);
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gemini-chatbot .chat-input button.chat-send:hover {
+  color: var(--chat-accent-hover);
+  box-shadow:
+    6px 6px 12px var(--chat-shadow-dark),
+    -6px -6px 12px var(--chat-shadow-light);
+}
+
+.gemini-chatbot .chat-input button.chat-send:active {
+  box-shadow:
+    inset 3px 3px 6px var(--chat-shadow-dark),
+    inset -3px -3px 6px var(--chat-shadow-light);
+}
+
+.gemini-chatbot .chat-input button.chat-send:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow:
+    2px 2px 4px var(--chat-shadow-dark),
+    -2px -2px 4px var(--chat-shadow-light);
+}
+
+/* 送信アイコン（SVG） */
+.gemini-chatbot .chat-input button.chat-send svg {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
+
+/* ==========================================================================
+   空状態・ウェルカムメッセージ
+   ========================================================================== */
+.gemini-chatbot .chat-log:empty::before {
+  content: '💬 何でも聞いてね！';
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--chat-text-light);
+  font-size: 14px;
+}
