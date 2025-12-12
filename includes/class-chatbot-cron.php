@@ -20,10 +20,6 @@ class Chatbot_Cron {
     public static function unschedule() {
         // 全スケジュールを確実に解除
         wp_clear_scheduled_hook(self::HOOK);
-        $timestamp = wp_next_scheduled(self::HOOK);
-        if ($timestamp) {
-            wp_unschedule_event($timestamp, self::HOOK);
-        }
     }
 
     public static function process_queue() {
@@ -47,14 +43,3 @@ class Chatbot_Cron {
         update_option('chatbot_cron_errors', $errors, false);
     }
 }
-
-// 5分間隔のスケジュールを追加
-add_filter('cron_schedules', function ($schedules) {
-    if (!isset($schedules['five_minutes'])) {
-        $schedules['five_minutes'] = [
-            'interval' => 300,
-            'display' => __('Every Five Minutes'),
-        ];
-    }
-    return $schedules;
-});
