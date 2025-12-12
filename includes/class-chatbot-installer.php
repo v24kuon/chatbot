@@ -31,7 +31,7 @@ class Chatbot_Installer {
             $table_files = Chatbot_Repository::get_table('knowledge_files');
             $table_exists = ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table_files)) === $table_files);
             if ($table_exists) {
-                $files = Chatbot_Repository::list_all_files();
+        $files = Chatbot_Repository::list_all_files();
             } else {
                 error_log('[chatbot] uninstall: skip list_all_files because table missing: ' . $table_files);
             }
@@ -46,13 +46,13 @@ class Chatbot_Installer {
             $file_id = (is_object($file) && isset($file->id)) ? $file->id : 'n/a';
             try {
                 if (class_exists('Chatbot_File_Sync')) {
-                    Chatbot_File_Sync::delete_remote($file);
+            Chatbot_File_Sync::delete_remote($file);
                 }
             } catch (\Throwable $e) {
                 error_log('[chatbot] uninstall: delete_remote failed (file_id=' . $file_id . '): ' . $e->getMessage());
             }
             try {
-                if (!empty($file->storage_path) && file_exists($file->storage_path)) {
+            if (!empty($file->storage_path) && file_exists($file->storage_path)) {
                     $removed = @unlink($file->storage_path);
                     if ($removed === false) {
                         error_log('[chatbot] uninstall: unlink failed (file_id=' . $file_id . ', path=' . $file->storage_path . ')');

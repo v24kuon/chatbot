@@ -7,8 +7,8 @@ if (!defined('ABSPATH')) {
 /**
  * Gemini File Search 連携ヘルパー（簡易実装）。
  * - ストア作成: POST /v1beta/fileSearchStores?key=API_KEY
- * - ストアへのアップロード: POST /upload/v1beta/{fileSearchStoreName=fileSearchStores/*}:uploadToFileSearchStore?key=API_KEY
- * - ファイル削除: DELETE /v1beta/{fileSearchStores/*/documents/*}?key=API_KEY
+ * - ストアへのアップロード: POST /upload/v1beta/fileSearchStores/{store}/:uploadToFileSearchStore?key=API_KEY
+ * - ファイル削除: DELETE /v1beta/fileSearchStores/{store}/documents/{doc}?key=API_KEY
  *
  * 注意: エンドポイント仕様は公式ドキュメントに準拠。失敗時はエラーメッセージを返すのみ。
  */
@@ -19,12 +19,14 @@ class Chatbot_Gemini_File {
         if (!empty($set->store_name)) {
             return $set->store_name;
         }
+
         $name = 'store-' . sanitize_title($set->slug);
         $url = self::BASE . '/v1beta/fileSearchStores';
         $url = add_query_arg('key', $api_key, $url);
         $payload = [
             'display_name' => $name,
         ];
+
         $resp = wp_remote_post($url, [
             'headers' => [
                 'Content-Type' => 'application/json',
@@ -32,9 +34,11 @@ class Chatbot_Gemini_File {
             'body' => wp_json_encode($payload),
             'timeout' => 30,
         ]);
+
         if (is_wp_error($resp)) {
             return new WP_Error('gemini_store', $resp->get_error_message());
         }
+
         $code = wp_remote_retrieve_response_code($resp);
         $body = json_decode(wp_remote_retrieve_body($resp), true);
         if ($code >= 200 && $code < 300 && !empty($body['name'])) {
@@ -42,6 +46,7 @@ class Chatbot_Gemini_File {
             Chatbot_Repository::update_store_name($set->id, $store_name);
             return $store_name;
         }
+
         $msg = $body['error']['message'] ?? 'store create failed';
         return new WP_Error('gemini_store', $msg);
     }
@@ -50,6 +55,7 @@ class Chatbot_Gemini_File {
         if (!file_exists($file_path)) {
             return new WP_Error('upload', 'file not found');
         }
+
         // リソース名のセグメントごとにエンコードし、スラッシュを維持
         $resource = ltrim($store_name, '/');
         $resource = implode('/', array_map('rawurlencode', explode('/', $resource)));
@@ -80,11 +86,13 @@ class Chatbot_Gemini_File {
         if (is_wp_error($resp)) {
             return new WP_Error('gemini_upload', $resp->get_error_message());
         }
+
         $code = wp_remote_retrieve_response_code($resp);
         $data = json_decode(wp_remote_retrieve_body($resp), true);
         if ($code >= 200 && $code < 300 && !empty($data['file']['name'])) {
             return $data['file']['name'];
         }
+
         $msg = $data['error']['message'] ?? 'upload failed';
         return new WP_Error('gemini_upload', $msg);
     }
@@ -93,7 +101,7 @@ class Chatbot_Gemini_File {
      * Delete a file by full resource name (fileSearchStores/{store_id}/documents/{doc_id}).
      *
      * @param string $api_key API key for Gemini File Search.
-     * @param string $file_id Full resource name: fileSearchStores/*/documents/*.
+     * @param string $file_id Full resource name: fileSearchStores/{store}/documents/{doc}.
      * @return true|WP_Error
      */
     public static function delete_file($api_key, $file_id) {
@@ -102,14 +110,17 @@ class Chatbot_Gemini_File {
         $resource = implode('/', array_map('rawurlencode', explode('/', $resource)));
         $url = self::BASE . '/v1beta/' . $resource;
         $url = add_query_arg('key', $api_key, $url);
+
         $resp = wp_remote_request($url, ['method' => 'DELETE', 'timeout' => 20]);
         if (is_wp_error($resp)) {
             return $resp;
         }
+
         $code = wp_remote_retrieve_response_code($resp);
         if ($code >= 200 && $code < 300) {
             return true;
         }
+
         $data = json_decode(wp_remote_retrieve_body($resp), true);
         $msg = $data['error']['message'] ?? 'delete failed';
         return new WP_Error('gemini_delete', $msg);
