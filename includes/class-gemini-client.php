@@ -76,6 +76,8 @@ class Gemini_Client {
             return new WP_Error('api_error', $msg, [
                 'status' => $code,
                 'url'    => $safe_url,
+                // Keep the original (untruncated) response body for downstream parsing.
+                'response_body' => $res_body,
             ]);
         }
 
@@ -295,37 +297,54 @@ class Gemini_Client {
     }
 
     public function delete_file($file_name) {
-        $url = self::BASE_URL . '/v1beta/' . $file_name;
+        // Use force=true so that related chunks are also removed per Gemini docs.
+        $url = self::BASE_URL . '/v1beta/' . $file_name . '?force=true';
         $res = $this->request('DELETE', $url, null, [], false);
-        
+
         // Check for specific error: "Cannot delete non-empty Document"
         if (is_wp_error($res)) {
-            $error_data = $res->get_error_data();
-            $status = isset($error_data['status']) ? (int) $error_data['status'] : 0;
+            $error_data    = $res->get_error_data();
+            $status        = isset($error_data['status']) ? (int) $error_data['status'] : 0;
             $error_message = $res->get_error_message();
-            
+            $raw_body      = isset($error_data['response_body']) && is_string($error_data['response_body'])
+                ? $error_data['response_body']
+                : '';
+            $document_not_empty_message = 'このドキュメントは空でないため削除できません。ストア全体を削除するか、Geminiの管理画面から削除してください（force=true で再試行すると解消する可能性があります）。';
+
             // Check if this is a 400 error with "Cannot delete non-empty Document"
             if ($status === 400) {
-                // Try to parse JSON from error message
-                if (preg_match('/"message"\s*:\s*"([^"]+)"/', $error_message, $matches)) {
-                    $api_error_message = $matches[1];
-                    if (strpos($api_error_message, 'Cannot delete non-empty Document') !== false) {
-                        return new WP_Error(
-                            'document_not_empty',
-                            'このドキュメントは空でないため削除できません。Gemini APIの制限により、コンテンツが含まれているドキュメントは直接削除できません。ストア全体を削除するか、Geminiの管理画面から削除してください。'
-                        );
+                // Prefer parsing the raw response body (untruncated) if available.
+                if ($raw_body !== '') {
+                    $decoded = json_decode($raw_body, true);
+                    if (json_last_error() === JSON_ERROR_NONE) {
+                        $api_error_message = $decoded['error']['message'] ?? '';
+                        if (is_string($api_error_message) && strpos($api_error_message, 'Cannot delete non-empty Document') !== false) {
+                            return new WP_Error(
+                                'document_not_empty',
+                                $document_not_empty_message
+                            );
+                        }
+                    } elseif (preg_match('/"message"\s*:\s*"([^"]+)"/', $raw_body, $matches)) {
+                        $api_error_message = $matches[1];
+                        if (strpos($api_error_message, 'Cannot delete non-empty Document') !== false) {
+                            return new WP_Error(
+                                'document_not_empty',
+                                $document_not_empty_message
+                            );
+                        }
                     }
                 }
-                // Fallback: check the error message directly
+
+                // Fallback: check the formatted error message (may be truncated)
                 if (strpos($error_message, 'Cannot delete non-empty Document') !== false) {
                     return new WP_Error(
                         'document_not_empty',
-                        'このドキュメントは空でないため削除できません。Gemini APIの制限により、コンテンツが含まれているドキュメントは直接削除できません。ストア全体を削除するか、Geminiの管理画面から削除してください。'
+                        $document_not_empty_message
                     );
                 }
             }
         }
-        
+
         return $res;
     }
 
