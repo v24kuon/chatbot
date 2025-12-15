@@ -414,6 +414,7 @@ class Chatbot_Admin {
 
         $files = get_option($this->option_files, []);
         $target = null;
+        $target_index = -1; // 検索で見つけたtargetのインデックスを記録
         $has_constraint = ($req_file_id !== '' || $req_file_original !== '');
 
         // 1) index指定が妥当なら優先採用し、整合性も確認
@@ -421,10 +422,16 @@ class Chatbot_Admin {
             $stored = $files[$file_index];
             $stored_id = $stored['id'] ?? '';
             $stored_original = $stored['original'] ?? '';
+            // index経路でも、少なくとも一つの識別子が提供されていることを要求
+            if (!$has_constraint) {
+                $this->redirect_with_message('error', 'ファイル情報が不足しています。');
+            }
+            // 提供された識別子と保存値の整合性を確認
             if ((!empty($req_file_id) && $stored_id !== $req_file_id) || (!empty($req_file_original) && $stored_original !== $req_file_original)) {
                 $this->redirect_with_message('error', 'ファイル情報が一致しません。');
             }
             $target = $stored;
+            $target_index = $file_index; // インデックスを記録
         }
 
         // indexが無効で、かつ検索条件もない場合は中断
@@ -434,7 +441,7 @@ class Chatbot_Admin {
 
         // 2) index不正時は、id/original で保存済みエントリを検索して特定
         if (!$target && is_array($files)) {
-            foreach ($files as $f) {
+            foreach ($files as $idx => $f) {
                 if (!is_array($f)) {
                     continue;
                 }
@@ -444,16 +451,19 @@ class Chatbot_Admin {
                 if (!empty($req_file_id) && !empty($req_file_original)) {
                     if ($id_matches && $orig_matches) {
                         $target = $f;
+                        $target_index = $idx; // 検索で見つけたインデックスを記録
                         break;
                     }
                 } elseif (!empty($req_file_id)) {
                     if ($id_matches) {
                         $target = $f;
+                        $target_index = $idx; // 検索で見つけたインデックスを記録
                         break;
                     }
                 } elseif (!empty($req_file_original)) {
                     if ($orig_matches) {
                         $target = $f;
+                        $target_index = $idx; // 検索で見つけたインデックスを記録
                         break;
                     }
                 }
@@ -482,10 +492,11 @@ class Chatbot_Admin {
         if (is_wp_error($res)) {
             $this->redirect_with_message('error', '削除失敗: ' . $res->get_error_message());
         }
-        // Remove from local list (by index when possible; fallback by id/original).
-        if (is_array($files) && $file_index >= 0 && isset($files[$file_index])) {
-            unset($files[$file_index]);
+        // Remove from local list using the recorded target_index.
+        if (is_array($files) && $target_index >= 0 && isset($files[$target_index])) {
+            unset($files[$target_index]);
         } else {
+            // フォールバック: target_indexが記録されていない場合（通常は発生しない想定）
             // id と original の両方が一致するもののみ削除（片方一致では削除しない）
             $files = array_filter($files, function ($f) use ($file_id, $file_original) {
                 if (!is_array($f)) {
@@ -519,19 +530,53 @@ class Chatbot_Admin {
         $files = get_option($this->option_files, []);
         $client = new Gemini_Client();
 
+        // エラー追跡用の変数を初期化
+        $errors = []; // エラーメッセージを収集
+        $deleted_count = 0; // 成功した削除数をカウント
+        $total_files = 0; // 総ファイル数をカウント
+        $store_deleted = false; // ストア削除成功フラグ
+
+        // ファイル削除ループにエラーハンドリングを追加
         foreach ($files as $file) {
             if (!empty($file['id'])) {
-                $client->delete_file($file['id']);
+                $total_files++;
+                $res = $client->delete_file($file['id']);
+                if (is_wp_error($res)) {
+                    $errors[] = 'ファイル削除失敗 (' . ($file['original'] ?? $file['id']) . '): ' . $res->get_error_message();
+                } else {
+                    $deleted_count++;
+                }
             }
         }
+
+        // ストア削除にエラーハンドリングを追加
         if (!empty($store)) {
-            $client->delete_store($store);
+            $res = $client->delete_store($store);
+            if (is_wp_error($res)) {
+                $errors[] = 'ストア削除失敗: ' . $res->get_error_message();
+            } else {
+                $store_deleted = true;
+            }
         }
 
-        update_option($this->option_store, '', false);
-        update_option($this->option_files, [], false);
+        // すべての操作が成功した場合のみローカルキャッシュをクリア
+        if (empty($errors)) {
+            update_option($this->option_store, '', false);
+            update_option($this->option_files, [], false);
+            $this->redirect_with_message('success', 'ストアとファイルを削除しました。');
+            return;
+        }
 
-        $this->redirect_with_message('success', 'ストアとファイルを削除しました。');
+        // 部分的失敗の場合の詳細なエラーレポート
+        $msg = "一部の削除に失敗しました。\n\n";
+        $msg .= "削除結果:\n";
+        $msg .= "- ファイル削除: {$deleted_count}/{$total_files} 成功\n";
+        $msg .= "- ストア削除: " . ($store_deleted ? '成功' : '失敗') . "\n\n";
+        $msg .= "エラー詳細:\n";
+        $msg .= implode("\n", $errors) . "\n\n";
+        $msg .= "注意: ローカルキャッシュは保持されています。エラーを解決後、再度お試しください。";
+
+        $this->redirect_with_message('error', $msg);
     }
 
     public function render_notices() {
