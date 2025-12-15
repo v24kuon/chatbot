@@ -207,26 +207,20 @@ class Chatbot_Admin {
         $upload_res = $client->upload_file_to_store($store, $upload['file'], $file['name'], $mime);
 
         if (is_wp_error($upload_res)) {
-            if ($local_path !== '' && file_exists($local_path)) {
-                @unlink($local_path);
-            }
+            $this->cleanup_local_file($local_path);
             $this->redirect_with_message('error', 'ストア直接アップロード失敗: ' . $upload_res->get_error_message());
         }
 
         $op_name = $upload_res['name'] ?? '';
         if (empty($op_name)) {
             $details = wp_json_encode($upload_res, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
-            if ($local_path !== '' && file_exists($local_path)) {
-                @unlink($local_path);
-            }
+            $this->cleanup_local_file($local_path);
             $this->redirect_with_message('error', "ストア直接アップロード応答に operation name がありません。\nUpload response:\n{$details}");
         }
 
         $op_res = $client->wait_operation($op_name, 180, 3);
         if (is_wp_error($op_res)) {
-            if ($local_path !== '' && file_exists($local_path)) {
-                @unlink($local_path);
-            }
+            $this->cleanup_local_file($local_path);
             $this->redirect_with_message('error', 'アップロード待機失敗: ' . $op_res->get_error_message());
         }
 
@@ -260,9 +254,7 @@ class Chatbot_Admin {
         if ($file_name === '') {
             // リモートIDを取得できない状態でローカル登録すると整合性が崩れるためエラー扱いにする。
             $details = wp_json_encode($op_res, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
-            if ($local_path !== '' && file_exists($local_path)) {
-                @unlink($local_path);
-            }
+            $this->cleanup_local_file($local_path);
             $this->redirect_with_message(
                 'error',
                 "アップロードは完了しましたが、ドキュメントIDを取得できませんでした。\nOperation response:\n{$details}"
@@ -522,16 +514,7 @@ class Chatbot_Admin {
             $this->redirect_with_message('error', '削除失敗: ' . $res->get_error_message());
             return;
         }
-        // Best-effort: delete local uploaded file if path is stored.
-        $local_path = isset($target['path']) ? (string) $target['path'] : '';
-        if ($local_path !== '') {
-            $uploads = wp_get_upload_dir();
-            $base    = isset($uploads['basedir']) ? trailingslashit(wp_normalize_path($uploads['basedir'])) : '';
-            $norm    = wp_normalize_path($local_path);
-            if ($base !== '' && strpos($norm, $base) === 0 && file_exists($norm)) {
-                @unlink($norm);
-            }
-        }
+        $this->cleanup_local_file($target['path'] ?? '');
         // Remove from local list using the recorded target_index.
         if (is_array($files) && $target_index >= 0 && isset($files[$target_index])) {
             unset($files[$target_index]);
@@ -585,16 +568,7 @@ class Chatbot_Admin {
                     $errors[] = 'ファイル削除失敗 (' . ($file['original'] ?? $file['id']) . '): ' . $res->get_error_message();
                 } else {
                     $deleted_count++;
-                    // Best-effort: delete local uploaded file if path is stored.
-                    $local_path = isset($file['path']) ? (string) $file['path'] : '';
-                    if ($local_path !== '') {
-                        $uploads = wp_get_upload_dir();
-                        $base    = isset($uploads['basedir']) ? trailingslashit(wp_normalize_path($uploads['basedir'])) : '';
-                        $norm    = wp_normalize_path($local_path);
-                        if ($base !== '' && strpos($norm, $base) === 0 && file_exists($norm)) {
-                            @unlink($norm);
-                        }
-                    }
+                    $this->cleanup_local_file($file['path'] ?? '');
                 }
             }
         }
@@ -627,6 +601,20 @@ class Chatbot_Admin {
         $msg .= "注意: ローカルキャッシュは保持されています。エラーを解決後、再度お試しください。";
 
         $this->redirect_with_message('error', $msg);
+    }
+
+    private function cleanup_local_file($local_path) {
+        $local_path = (string) $local_path;
+        if ($local_path === '') {
+            return true;
+        }
+        $uploads = wp_get_upload_dir();
+        $base = isset($uploads['basedir']) ? trailingslashit(wp_normalize_path($uploads['basedir'])) : '';
+        $norm = wp_normalize_path($local_path);
+        if ($base !== '' && strpos($norm, $base) === 0 && file_exists($norm)) {
+            return (bool) @unlink($norm);
+        }
+        return !file_exists($norm);
     }
 
     public function render_notices() {
