@@ -54,6 +54,8 @@ class Chatbot_Admin {
         }
         $store = get_option($this->option_store, '');
         $files = get_option($this->option_files, []);
+        $api_key = get_option($this->option_api_key, '');
+        $has_api_key = !empty($api_key);
         ?>
         <div class="wrap">
             <h1>Gemini File Search Chatbot</h1>
@@ -67,7 +69,18 @@ class Chatbot_Admin {
                     <tr>
                         <th scope="row"><label for="chatbot_api_key">API Key</label></th>
                         <td>
-                            <input type="password" id="chatbot_api_key" name="api_key" class="regular-text" placeholder="保存済みキーは非表示" />
+                            <input type="password" id="chatbot_api_key" name="api_key" class="regular-text" placeholder="<?php echo $has_api_key ? '新しいキーを入力（保存済みキーは非表示）' : 'APIキーを入力'; ?>" />
+                            <?php if ($has_api_key): ?>
+                                <p class="description" style="margin-top:6px;color:#2271b1;">
+                                    <span style="display:inline-block;width:16px;height:16px;line-height:16px;text-align:center;background:#2271b1;color:#fff;border-radius:50%;font-size:12px;margin-right:4px;">✓</span>
+                                    <strong>APIキーが保存されています</strong>
+                                </p>
+                            <?php else: ?>
+                                <p class="description" style="margin-top:6px;color:#d63638;">
+                                    <span style="display:inline-block;width:16px;height:16px;line-height:16px;text-align:center;background:#d63638;color:#fff;border-radius:50%;font-size:12px;margin-right:4px;">!</span>
+                                    APIキーが設定されていません
+                                </p>
+                            <?php endif; ?>
                         </td>
                     </tr>
                 </table>
