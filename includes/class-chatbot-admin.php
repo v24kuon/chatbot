@@ -260,6 +260,8 @@ class Chatbot_Admin {
             'id'       => $file_name,
             'original' => $file['name'],
             'mime'     => $mime,
+            // Save local uploaded file path for later cleanup on delete.
+            'path'     => $upload['file'] ?? '',
         ];
         update_option($this->option_files, $files, false);
 
@@ -505,6 +507,16 @@ class Chatbot_Admin {
         if (is_wp_error($res)) {
             $this->redirect_with_message('error', '削除失敗: ' . $res->get_error_message());
         }
+        // Best-effort: delete local uploaded file if path is stored.
+        $local_path = isset($target['path']) ? (string) $target['path'] : '';
+        if ($local_path !== '') {
+            $uploads = wp_get_upload_dir();
+            $base    = isset($uploads['basedir']) ? trailingslashit(wp_normalize_path($uploads['basedir'])) : '';
+            $norm    = wp_normalize_path($local_path);
+            if ($base !== '' && strpos($norm, $base) === 0 && file_exists($norm)) {
+                @unlink($norm);
+            }
+        }
         // Remove from local list using the recorded target_index.
         if (is_array($files) && $target_index >= 0 && isset($files[$target_index])) {
             unset($files[$target_index]);
@@ -558,6 +570,16 @@ class Chatbot_Admin {
                     $errors[] = 'ファイル削除失敗 (' . ($file['original'] ?? $file['id']) . '): ' . $res->get_error_message();
                 } else {
                     $deleted_count++;
+                    // Best-effort: delete local uploaded file if path is stored.
+                    $local_path = isset($file['path']) ? (string) $file['path'] : '';
+                    if ($local_path !== '') {
+                        $uploads = wp_get_upload_dir();
+                        $base    = isset($uploads['basedir']) ? trailingslashit(wp_normalize_path($uploads['basedir'])) : '';
+                        $norm    = wp_normalize_path($local_path);
+                        if ($base !== '' && strpos($norm, $base) === 0 && file_exists($norm)) {
+                            @unlink($norm);
+                        }
+                    }
                 }
             }
         }
