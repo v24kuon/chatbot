@@ -394,8 +394,14 @@ class Chatbot_Admin {
         // Prefer the stored option entry (avoids tampering and supports legacy entries).
         $files = get_option($this->option_files, []);
         if (is_array($files) && $file_index >= 0 && isset($files[$file_index]) && is_array($files[$file_index])) {
-            $file_id = $files[$file_index]['id'] ?? $file_id;
-            $file_original = $files[$file_index]['original'] ?? $file_original;
+            $stored_id = $files[$file_index]['id'] ?? '';
+            $stored_original = $files[$file_index]['original'] ?? '';
+            // 送信された値と保存値の整合性を検証し、改ざんを防ぐ
+            if ((!empty($file_id) && $stored_id !== $file_id) || (!empty($file_original) && $stored_original !== $file_original)) {
+                $this->redirect_with_message('error', 'ファイル情報が一致しません。');
+            }
+            $file_id = $stored_id ?: $file_id;
+            $file_original = $stored_original ?: $file_original;
         }
 
         if (empty($file_id) && empty($file_original)) {
@@ -407,7 +413,7 @@ class Chatbot_Admin {
         if (!empty($file_id) && (strpos($file_id, 'fileSearchStores/') === 0 || strpos($file_id, 'files/') === 0)) {
             $res = $client->delete_file($file_id);
         } else {
-            // Legacy data may have stored only the local filename. Try to resolve by displayName.
+            // Legacy data may have stored only the display name. Resolve by displayName;複数一致なら中断。
             if (empty($store)) {
                 $this->redirect_with_message('error', 'ストアが未設定のため削除できません。');
             }
@@ -422,17 +428,24 @@ class Chatbot_Admin {
             unset($files[$file_index]);
             $files = array_values($files);
         } else {
+            // id と original の両方が一致するもののみ削除（片方一致では削除しない）
             $files = array_filter($files, function ($f) use ($file_id, $file_original) {
                 if (!is_array($f)) {
                     return true;
                 }
-                if (!empty($file_id) && ($f['id'] ?? '') === $file_id) {
-                    return false;
+                $id_matches = empty($file_id) ? false : (($f['id'] ?? '') === $file_id);
+                $original_matches = empty($file_original) ? false : (($f['original'] ?? '') === $file_original);
+                // 両方提示されている場合は両方一致で削除。どちらかしか無い場合はその値で一致したもののみ削除。
+                if (!empty($file_id) && !empty($file_original)) {
+                    return !($id_matches && $original_matches);
                 }
-                if (!empty($file_original) && ($f['original'] ?? '') === $file_original) {
-                    return false;
+                if (!empty($file_id)) {
+                    return !$id_matches;
                 }
-                return true;
+                if (!empty($file_original)) {
+                    return !$original_matches;
+                }
+                return true; // ここには来ない想定
             });
             $files = array_values($files);
         }

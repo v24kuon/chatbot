@@ -249,7 +249,8 @@ class Gemini_Client {
         }
 
         $token = '';
-        for ($i = 0; $i < 5; $i++) { // up to 100 docs (20 * 5)
+        $matches = [];
+        for ($i = 0; $i < 50; $i++) { // up to 1000 docs (20 * 50)
             $res = $this->list_documents($store_name, 20, $token);
             if (is_wp_error($res)) {
                 return $res;
@@ -266,7 +267,7 @@ class Gemini_Client {
                         if ($name === '') {
                             continue;
                         }
-                        return $this->delete_file($name);
+                        $matches[] = $name;
                     }
                 }
             }
@@ -277,9 +278,19 @@ class Gemini_Client {
             }
         }
 
+        if (count($matches) === 1) {
+            return $this->delete_file($matches[0]);
+        }
+        if (count($matches) === 0) {
+            return new WP_Error(
+                'document_not_found',
+                'Gemini上のドキュメントを特定できませんでした。全削除、または再アップロードをお試しください。'
+            );
+        }
+
         return new WP_Error(
-            'document_not_found',
-            'Gemini上のドキュメントを特定できませんでした。全削除、または再アップロードをお試しください。'
+            'ambiguous_document',
+            '同名のドキュメントが複数存在するため削除を中断しました。全削除、または対象を特定したうえで再度お試しください。'
         );
     }
 
