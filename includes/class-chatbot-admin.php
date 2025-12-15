@@ -103,13 +103,13 @@ class Chatbot_Admin {
                         <thead>
                             <tr>
                                 <th>表示名</th>
-                                <th>File Name</th>
+                                <th>Document ID</th>
                                 <th>MIME</th>
                                 <th>操作</th>
                             </tr>
                         </thead>
                         <tbody>
-                        <?php foreach ($files as $file): ?>
+                        <?php foreach ($files as $idx => $file): ?>
                             <tr>
                                 <td><?php echo esc_html($file['original'] ?? ''); ?></td>
                                 <td><?php echo esc_html($file['id'] ?? ''); ?></td>
@@ -118,7 +118,9 @@ class Chatbot_Admin {
                                     <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="display:inline;">
                                         <?php wp_nonce_field('chatbot_delete_file'); ?>
                                         <input type="hidden" name="action" value="chatbot_delete_file" />
-                                        <input type="hidden" name="file_id" value="<?php echo esc_attr($file['id']); ?>" />
+                                        <input type="hidden" name="file_index" value="<?php echo esc_attr((string) $idx); ?>" />
+                                        <input type="hidden" name="file_id" value="<?php echo esc_attr($file['id'] ?? ''); ?>" />
+                                        <input type="hidden" name="file_original" value="<?php echo esc_attr($file['original'] ?? ''); ?>" />
                                         <button class="button button-secondary" onclick="return confirm('このファイルを削除しますか？');">削除</button>
                                     </form>
                                 </td>
@@ -204,13 +206,19 @@ class Chatbot_Admin {
             $this->redirect_with_message('error', 'アップロード待機失敗: ' . $op_res->get_error_message());
         }
 
-        // Try to extract file/document name from operation response
-        $file_name = $op_res['response']['file']['name']
-            ?? $op_res['response']['name']
+        // Try to extract the remote document resource name from operation response.
+        // Expected formats include:
+        // - fileSearchStores/{store}/documents/{document}
+        // - files/{file} (legacy/other upload flows)
+        $file_name = $op_res['response']['name']
+            ?? ($op_res['response']['document']['name'] ?? '')
+            ?? ($op_res['response']['documentName'] ?? '')
+            ?? ($op_res['response']['file']['name'] ?? '')
             ?? ($op_res['response']['fileName'] ?? '');
-
-        if (empty($file_name)) {
-            $file_name = $file['name']; // fallback for display
+        $file_name = is_string($file_name) ? trim($file_name) : '';
+        if ($file_name !== '' && strpos($file_name, 'fileSearchStores/') !== 0 && strpos($file_name, 'files/') !== 0) {
+            // Avoid storing a local filename as a remote resource id.
+            $file_name = '';
         }
 
         $files = get_option($this->option_files, []);
@@ -377,19 +385,57 @@ class Chatbot_Admin {
         if (!current_user_can('manage_options') || !check_admin_referer('chatbot_delete_file')) {
             wp_die('forbidden');
         }
-        $file_id = isset($_POST['file_id']) ? sanitize_text_field($_POST['file_id']) : '';
-        if (!$file_id) {
-            $this->redirect_with_message('error', 'ファイルIDが不正です。');
+        $store = get_option($this->option_store, '');
+
+        $file_index = isset($_POST['file_index']) ? intval($_POST['file_index']) : -1;
+        $file_id = isset($_POST['file_id']) ? sanitize_text_field(wp_unslash($_POST['file_id'])) : '';
+        $file_original = isset($_POST['file_original']) ? sanitize_text_field(wp_unslash($_POST['file_original'])) : '';
+
+        // Prefer the stored option entry (avoids tampering and supports legacy entries).
+        $files = get_option($this->option_files, []);
+        if (is_array($files) && $file_index >= 0 && isset($files[$file_index]) && is_array($files[$file_index])) {
+            $file_id = $files[$file_index]['id'] ?? $file_id;
+            $file_original = $files[$file_index]['original'] ?? $file_original;
         }
+
+        if (empty($file_id) && empty($file_original)) {
+            $this->redirect_with_message('error', 'ファイル情報が不正です。');
+        }
+
         $client = new Gemini_Client();
-        $res = $client->delete_file($file_id);
+        // If we have a proper resource name, delete directly.
+        if (!empty($file_id) && (strpos($file_id, 'fileSearchStores/') === 0 || strpos($file_id, 'files/') === 0)) {
+            $res = $client->delete_file($file_id);
+        } else {
+            // Legacy data may have stored only the local filename. Try to resolve by displayName.
+            if (empty($store)) {
+                $this->redirect_with_message('error', 'ストアが未設定のため削除できません。');
+            }
+            $name_for_lookup = $file_original ?: $file_id;
+            $res = $client->delete_document_by_display_name($store, $name_for_lookup);
+        }
         if (is_wp_error($res)) {
             $this->redirect_with_message('error', '削除失敗: ' . $res->get_error_message());
         }
-        $files = get_option($this->option_files, []);
-        $files = array_filter($files, function ($f) use ($file_id) {
-            return ($f['id'] ?? '') !== $file_id;
-        });
+        // Remove from local list (by index when possible; fallback by id/original).
+        if (is_array($files) && $file_index >= 0 && isset($files[$file_index])) {
+            unset($files[$file_index]);
+            $files = array_values($files);
+        } else {
+            $files = array_filter($files, function ($f) use ($file_id, $file_original) {
+                if (!is_array($f)) {
+                    return true;
+                }
+                if (!empty($file_id) && ($f['id'] ?? '') === $file_id) {
+                    return false;
+                }
+                if (!empty($file_original) && ($f['original'] ?? '') === $file_original) {
+                    return false;
+                }
+                return true;
+            });
+            $files = array_values($files);
+        }
         update_option($this->option_files, array_values($files), false);
         $this->redirect_with_message('success', 'ファイルを削除しました。');
     }

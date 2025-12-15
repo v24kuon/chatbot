@@ -170,13 +170,13 @@ class Gemini_Client {
         foreach ($candidates as $idx => $cand) {
             $candidate_texts[] = "ID:" . $cand['id'] . " | 質問パターン: " . $cand['question_pattern'] . " | 回答: " . $cand['answer_text'];
         }
-        $instruction = "あなたはFAQの回答選択エージェントです。以下の候補リストの中から、ユーザーの質問に対し**完全に意味が一致するか、極めて高い関連性を持つ**回答を1つだけ選んでください。\n\n"
+        $instruction = "あなたはFAQの回答選択エージェントです。以下の候補リストの中から、ユーザーの質問に対して**意味的に同じ、または同じ意図を持つ**ものを1つ選んでください。\n\n"
             . "候補リスト:\n" . implode("\n", $candidate_texts) . "\n\n"
             . "ルール:\n"
-            . "1. 質問の意味が候補の「質問パターン」と合致する場合のみ、そのIDを選んでください。\n"
-            . "2. 単にキーワードが含まれている程度や、曖昧な場合は選ばないでください。\n"
-            . "3. 適切なものがなければ 'NO_MATCH' と答えてください。\n"
-            . "4. 回答は 'ID:<数字>' または 'NO_MATCH' の形式のみで出力してください。";
+            . "1. 表現が異なっていても、質問の**意図や聞きたい内容が同じ**であれば選んでください。\n"
+            . "   例: 「終了時間は？」と「いつ終わるの？」「何時に終わる？」「終わりは何時？」は同じ意図です。\n"
+            . "2. 質問の意図が候補のどれとも一致しない場合のみ 'NO_MATCH' と答えてください。\n"
+            . "3. 回答は 'ID:<数字>' または 'NO_MATCH' の形式のみで出力してください。";
 
         $body = [
             'contents' => [
@@ -212,6 +212,75 @@ class Gemini_Client {
         return $this->request('POST', $url, [
             'fileName' => $file_name,
         ]);
+    }
+
+    private function normalize_display_name($text) {
+        $text = is_string($text) ? $text : '';
+        $text = trim($text);
+        if ($text === '') {
+            return '';
+        }
+        return mb_convert_kana($text, 'KVas');
+    }
+
+    public function list_documents($store_name, $page_size = 20, $page_token = '') {
+        $page_size = (int) $page_size;
+        if ($page_size < 1) {
+            $page_size = 1;
+        }
+        if ($page_size > 20) {
+            $page_size = 20;
+        }
+
+        $query = [
+            'pageSize' => $page_size,
+        ];
+        if (!empty($page_token)) {
+            $query['pageToken'] = (string) $page_token;
+        }
+        $url = self::BASE_URL . '/v1beta/' . $store_name . '/documents?' . http_build_query($query);
+        return $this->request('GET', $url, null, [], true);
+    }
+
+    public function delete_document_by_display_name($store_name, $display_name) {
+        $target = $this->normalize_display_name($display_name);
+        if ($target === '') {
+            return new WP_Error('invalid_display_name', 'ファイル名が不正です。');
+        }
+
+        $token = '';
+        for ($i = 0; $i < 5; $i++) { // up to 100 docs (20 * 5)
+            $res = $this->list_documents($store_name, 20, $token);
+            if (is_wp_error($res)) {
+                return $res;
+            }
+            $docs = $res['documents'] ?? [];
+            if (is_array($docs)) {
+                foreach ($docs as $doc) {
+                    if (!is_array($doc)) {
+                        continue;
+                    }
+                    $dn = $this->normalize_display_name($doc['displayName'] ?? '');
+                    if ($dn !== '' && $dn === $target) {
+                        $name = isset($doc['name']) ? (string) $doc['name'] : '';
+                        if ($name === '') {
+                            continue;
+                        }
+                        return $this->delete_file($name);
+                    }
+                }
+            }
+
+            $token = isset($res['nextPageToken']) ? (string) $res['nextPageToken'] : '';
+            if ($token === '') {
+                break;
+            }
+        }
+
+        return new WP_Error(
+            'document_not_found',
+            'Gemini上のドキュメントを特定できませんでした。全削除、または再アップロードをお試しください。'
+        );
     }
 
     public function delete_file($file_name) {
