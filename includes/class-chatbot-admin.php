@@ -512,7 +512,6 @@ class Chatbot_Admin {
         }
         if (is_wp_error($res)) {
             $this->redirect_with_message('error', '削除失敗: ' . $res->get_error_message());
-            return;
         }
         $this->cleanup_local_file($target['path'] ?? '');
         // Remove from local list using the recorded target_index.
@@ -560,6 +559,7 @@ class Chatbot_Admin {
         $store_deleted = false; // ストア削除成功フラグ
 
         // ファイル削除ループにエラーハンドリングを追加
+        $deleted_paths = [];
         foreach ($files as $file) {
             if (!empty($file['id'])) {
                 $total_files++;
@@ -568,7 +568,7 @@ class Chatbot_Admin {
                     $errors[] = 'ファイル削除失敗 (' . ($file['original'] ?? $file['id']) . '): ' . $res->get_error_message();
                 } else {
                     $deleted_count++;
-                    $this->cleanup_local_file($file['path'] ?? '');
+                    $deleted_paths[] = $file['path'] ?? '';
                 }
             }
         }
@@ -587,6 +587,9 @@ class Chatbot_Admin {
         if (empty($errors)) {
             update_option($this->option_store, '', false);
             update_option($this->option_files, [], false);
+            foreach ($deleted_paths as $path) {
+                $this->cleanup_local_file($path);
+            }
             $this->redirect_with_message('success', 'ストアとファイルを削除しました。');
             return;
         }
