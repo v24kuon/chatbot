@@ -560,10 +560,11 @@ class Chatbot_Admin {
 
         // ファイル削除ループにエラーハンドリングを追加
         $deleted_paths = [];
+        $local_only_paths = [];
         foreach ($files as $file) {
             // If no remote ID is stored, we cannot delete remotely; clean local path later.
             if (empty($file['id'])) {
-                $deleted_paths[] = $file['path'] ?? '';
+                $local_only_paths[] = $file['path'] ?? '';
                 continue;
             }
 
@@ -590,13 +591,18 @@ class Chatbot_Admin {
         // すべての操作が成功した場合のみローカルキャッシュをクリア
         if (empty($errors)) {
             // Clean local files first; then clear DB entries to keep state consistent on I/O errors.
-            foreach ($deleted_paths as $path) {
+            foreach (array_merge($local_only_paths, $deleted_paths) as $path) {
                 $this->cleanup_local_file($path);
             }
             update_option($this->option_store, '', false);
             update_option($this->option_files, [], false);
             $this->redirect_with_message('success', 'ストアとファイルを削除しました。');
             return;
+        }
+
+        // On partial failure: still clean up local-only entries (no remote delete attempted).
+        foreach ($local_only_paths as $path) {
+            $this->cleanup_local_file($path);
         }
 
         // 部分的失敗の場合の詳細なエラーレポート
