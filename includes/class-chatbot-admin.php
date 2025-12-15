@@ -210,12 +210,23 @@ class Chatbot_Admin {
         // Expected formats include:
         // - fileSearchStores/{store}/documents/{document}
         // - files/{file} (legacy/other upload flows)
-        $file_name = $op_res['response']['name']
-            ?? ($op_res['response']['document']['name'] ?? '')
-            ?? ($op_res['response']['documentName'] ?? '')
-            ?? ($op_res['response']['file']['name'] ?? '')
-            ?? ($op_res['response']['fileName'] ?? '');
-        $file_name = is_string($file_name) ? trim($file_name) : '';
+        $candidates = [
+            $op_res['response']['name'] ?? null,
+            $op_res['response']['document']['name'] ?? null,
+            $op_res['response']['documentName'] ?? null,
+            $op_res['response']['file']['name'] ?? null,
+            $op_res['response']['fileName'] ?? null,
+        ];
+        $file_name = '';
+        foreach ($candidates as $cand) {
+            if (is_string($cand)) {
+                $cand = trim($cand);
+                if ($cand !== '') {
+                    $file_name = $cand;
+                    break;
+                }
+            }
+        }
         if ($file_name !== '' && strpos($file_name, 'fileSearchStores/') !== 0 && strpos($file_name, 'files/') !== 0) {
             // Avoid storing a local filename as a remote resource id.
             $file_name = '';
