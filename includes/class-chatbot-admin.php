@@ -585,11 +585,12 @@ class Chatbot_Admin {
 
         // すべての操作が成功した場合のみローカルキャッシュをクリア
         if (empty($errors)) {
-            update_option($this->option_store, '', false);
-            update_option($this->option_files, [], false);
+            // Clean local files first; then clear DB entries to keep state consistent on I/O errors.
             foreach ($deleted_paths as $path) {
                 $this->cleanup_local_file($path);
             }
+            update_option($this->option_store, '', false);
+            update_option($this->option_files, [], false);
             $this->redirect_with_message('success', 'ストアとファイルを削除しました。');
             return;
         }
