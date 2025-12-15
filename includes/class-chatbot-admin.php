@@ -600,10 +600,16 @@ class Chatbot_Admin {
             return;
         }
 
-        // On partial failure: still clean up local-only entries (no remote delete attempted).
-        foreach ($local_only_paths as $path) {
+        // On partial failure: still clean up local-only entries (no remote delete attempted)
+        // and paths already deleted remotely to avoid orphaned local files.
+        foreach (array_merge($local_only_paths, $deleted_paths) as $path) {
             $this->cleanup_local_file($path);
         }
+        // Remove local-only entries from DB to avoid orphaned records.
+        $remaining = array_filter($files, function ($f) {
+            return !empty($f['id']);
+        });
+        update_option($this->option_files, array_values($remaining), false);
 
         // 部分的失敗の場合の詳細なエラーレポート
         $msg = "一部の削除に失敗しました。\n\n";
