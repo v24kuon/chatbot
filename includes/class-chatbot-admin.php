@@ -233,6 +233,15 @@ class Chatbot_Admin {
             }
         }
 
+        if ($file_name === '') {
+            // リモートIDを取得できない状態でローカル登録すると整合性が崩れるためエラー扱いにする。
+            $details = wp_json_encode($op_res, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
+            $this->redirect_with_message(
+                'error',
+                "アップロードは完了しましたが、ドキュメントIDを取得できませんでした。\nOperation response:\n{$details}"
+            );
+        }
+
         $files = get_option($this->option_files, []);
         $files[] = [
             'id'       => $file_name,
@@ -405,7 +414,7 @@ class Chatbot_Admin {
 
         $files = get_option($this->option_files, []);
         $target = null;
-        $target_index = -1;
+        $has_constraint = ($req_file_id !== '' || $req_file_original !== '');
 
         // 1) index指定が妥当なら優先採用し、整合性も確認
         if (is_array($files) && $file_index >= 0 && isset($files[$file_index]) && is_array($files[$file_index])) {
@@ -416,7 +425,11 @@ class Chatbot_Admin {
                 $this->redirect_with_message('error', 'ファイル情報が一致しません。');
             }
             $target = $stored;
-            $target_index = $file_index;
+        }
+
+        // indexが無効で、かつ検索条件もない場合は中断
+        if (!$target && !$has_constraint) {
+            $this->redirect_with_message('error', 'ファイル情報が不足しています。');
         }
 
         // 2) index不正時は、id/original で保存済みエントリを検索して特定
@@ -425,11 +438,11 @@ class Chatbot_Admin {
                 if (!is_array($f)) {
                     continue;
                 }
-                $id_matches = $req_file_id !== '' ? (($f['id'] ?? '') === $req_file_id) : true;
-                $orig_matches = $req_file_original !== '' ? (($f['original'] ?? '') === $req_file_original) : true;
-                if ($id_matches && $orig_matches) {
+                $id_matches = ($req_file_id !== '' && ($f['id'] ?? '') === $req_file_id);
+                $orig_matches = ($req_file_original !== '' && ($f['original'] ?? '') === $req_file_original);
+                // どちらか一方でも指定され一致した場合に採用
+                if (($req_file_id !== '' && $id_matches) || ($req_file_original !== '' && $orig_matches)) {
                     $target = $f;
-                    $target_index = $i;
                     break;
                 }
             }
