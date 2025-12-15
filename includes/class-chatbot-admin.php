@@ -560,6 +560,7 @@ class Chatbot_Admin {
 
         // ファイル削除ループにエラーハンドリングを追加
         $deleted_paths = [];
+        $deleted_ids   = [];
         $local_only_paths = [];
         foreach ($files as $file) {
             // If no remote ID is stored, we cannot delete remotely; clean local path later.
@@ -575,6 +576,7 @@ class Chatbot_Admin {
             } else {
                 $deleted_count++;
                 $deleted_paths[] = $file['path'] ?? '';
+                $deleted_ids[]   = $file['id'];
             }
         }
 
@@ -605,9 +607,13 @@ class Chatbot_Admin {
         foreach (array_merge($local_only_paths, $deleted_paths) as $path) {
             $this->cleanup_local_file($path);
         }
-        // Remove local-only entries from DB to avoid orphaned records.
-        $remaining = array_filter($files, function ($f) {
-            return !empty($f['id']);
+        // Remove successfully deleted entries from DB; keep entries that failed or lacked IDs.
+        $remaining = array_filter($files, function ($f) use ($deleted_ids) {
+            $id = $f['id'] ?? '';
+            if ($id === '') {
+                return true; // keep id-less entries for potential retry
+            }
+            return !in_array($id, $deleted_ids, true);
         });
         update_option($this->option_files, array_values($remaining), false);
 
