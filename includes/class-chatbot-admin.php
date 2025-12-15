@@ -197,6 +197,8 @@ class Chatbot_Admin {
         if (isset($upload['error'])) {
             $this->redirect_with_message('error', 'アップロード失敗: ' . $upload['error']);
         }
+        // Keep local path for cleanup on failure
+        $local_path = $upload['file'] ?? '';
 
         $client = new Gemini_Client();
         $mime = $upload['type'] ?? 'application/octet-stream';
@@ -205,17 +207,20 @@ class Chatbot_Admin {
         $upload_res = $client->upload_file_to_store($store, $upload['file'], $file['name'], $mime);
 
         if (is_wp_error($upload_res)) {
+            $this->cleanup_local_file($local_path);
             $this->redirect_with_message('error', 'ストア直接アップロード失敗: ' . $upload_res->get_error_message());
         }
 
         $op_name = $upload_res['name'] ?? '';
         if (empty($op_name)) {
             $details = wp_json_encode($upload_res, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
+            $this->cleanup_local_file($local_path);
             $this->redirect_with_message('error', "ストア直接アップロード応答に operation name がありません。\nUpload response:\n{$details}");
         }
 
         $op_res = $client->wait_operation($op_name, 180, 3);
         if (is_wp_error($op_res)) {
+            $this->cleanup_local_file($local_path);
             $this->redirect_with_message('error', 'アップロード待機失敗: ' . $op_res->get_error_message());
         }
 
@@ -249,6 +254,7 @@ class Chatbot_Admin {
         if ($file_name === '') {
             // リモートIDを取得できない状態でローカル登録すると整合性が崩れるためエラー扱いにする。
             $details = wp_json_encode($op_res, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
+            $this->cleanup_local_file($local_path);
             $this->redirect_with_message(
                 'error',
                 "アップロードは完了しましたが、ドキュメントIDを取得できませんでした。\nOperation response:\n{$details}"
@@ -260,6 +266,8 @@ class Chatbot_Admin {
             'id'       => $file_name,
             'original' => $file['name'],
             'mime'     => $mime,
+            // Save local uploaded file path for later cleanup on delete.
+            'path'     => $upload['file'] ?? '',
         ];
         update_option($this->option_files, $files, false);
 
@@ -505,6 +513,7 @@ class Chatbot_Admin {
         if (is_wp_error($res)) {
             $this->redirect_with_message('error', '削除失敗: ' . $res->get_error_message());
         }
+        $this->cleanup_local_file($target['path'] ?? '');
         // Remove from local list using the recorded target_index.
         if (is_array($files) && $target_index >= 0 && isset($files[$target_index])) {
             unset($files[$target_index]);
@@ -550,15 +559,24 @@ class Chatbot_Admin {
         $store_deleted = false; // ストア削除成功フラグ
 
         // ファイル削除ループにエラーハンドリングを追加
+        $deleted_paths = [];
+        $deleted_ids   = [];
+        $local_only_paths = [];
         foreach ($files as $file) {
-            if (!empty($file['id'])) {
-                $total_files++;
-                $res = $client->delete_file($file['id']);
-                if (is_wp_error($res)) {
-                    $errors[] = 'ファイル削除失敗 (' . ($file['original'] ?? $file['id']) . '): ' . $res->get_error_message();
-                } else {
-                    $deleted_count++;
-                }
+            // If no remote ID is stored, we cannot delete remotely; clean local path later.
+            if (empty($file['id'])) {
+                $local_only_paths[] = $file['path'] ?? '';
+                continue;
+            }
+
+            $total_files++;
+            $res = $client->delete_file($file['id']);
+            if (is_wp_error($res)) {
+                $errors[] = 'ファイル削除失敗 (' . ($file['original'] ?? $file['id']) . '): ' . $res->get_error_message();
+            } else {
+                $deleted_count++;
+                $deleted_paths[] = $file['path'] ?? '';
+                $deleted_ids[]   = $file['id'];
             }
         }
 
@@ -574,11 +592,29 @@ class Chatbot_Admin {
 
         // すべての操作が成功した場合のみローカルキャッシュをクリア
         if (empty($errors)) {
+            // Clean local files first; then clear DB entries to keep state consistent on I/O errors.
+            foreach (array_merge($local_only_paths, $deleted_paths) as $path) {
+                $this->cleanup_local_file($path);
+            }
             update_option($this->option_store, '', false);
             update_option($this->option_files, [], false);
             $this->redirect_with_message('success', 'ストアとファイルを削除しました。');
             return;
         }
+
+        // On partial failure: clean up paths already deleted remotely to avoid orphaned local files.
+        foreach ($deleted_paths as $path) {
+            $this->cleanup_local_file($path);
+        }
+        // Remove successfully deleted entries from DB; keep entries that failed or lacked IDs.
+        $remaining = array_filter($files, function ($f) use ($deleted_ids) {
+            $id = $f['id'] ?? '';
+            if ($id === '') {
+                return true; // keep id-less entries for potential retry
+            }
+            return !in_array($id, $deleted_ids, true);
+        });
+        update_option($this->option_files, array_values($remaining), false);
 
         // 部分的失敗の場合の詳細なエラーレポート
         $msg = "一部の削除に失敗しました。\n\n";
@@ -590,6 +626,20 @@ class Chatbot_Admin {
         $msg .= "注意: ローカルキャッシュは保持されています。エラーを解決後、再度お試しください。";
 
         $this->redirect_with_message('error', $msg);
+    }
+
+    private function cleanup_local_file($local_path) {
+        $local_path = (string) $local_path;
+        if ($local_path === '') {
+            return true;
+        }
+        $uploads = wp_get_upload_dir();
+        $base = isset($uploads['basedir']) ? trailingslashit(wp_normalize_path($uploads['basedir'])) : '';
+        $norm = wp_normalize_path($local_path);
+        if ($base !== '' && strpos($norm, $base) === 0 && file_exists($norm)) {
+            return (bool) @unlink($norm);
+        }
+        return !file_exists($norm);
     }
 
     public function render_notices() {
