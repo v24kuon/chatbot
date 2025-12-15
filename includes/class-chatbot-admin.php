@@ -197,6 +197,8 @@ class Chatbot_Admin {
         if (isset($upload['error'])) {
             $this->redirect_with_message('error', 'アップロード失敗: ' . $upload['error']);
         }
+        // Keep local path for cleanup on failure
+        $local_path = $upload['file'] ?? '';
 
         $client = new Gemini_Client();
         $mime = $upload['type'] ?? 'application/octet-stream';
@@ -205,17 +207,26 @@ class Chatbot_Admin {
         $upload_res = $client->upload_file_to_store($store, $upload['file'], $file['name'], $mime);
 
         if (is_wp_error($upload_res)) {
+            if ($local_path !== '' && file_exists($local_path)) {
+                @unlink($local_path);
+            }
             $this->redirect_with_message('error', 'ストア直接アップロード失敗: ' . $upload_res->get_error_message());
         }
 
         $op_name = $upload_res['name'] ?? '';
         if (empty($op_name)) {
             $details = wp_json_encode($upload_res, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
+            if ($local_path !== '' && file_exists($local_path)) {
+                @unlink($local_path);
+            }
             $this->redirect_with_message('error', "ストア直接アップロード応答に operation name がありません。\nUpload response:\n{$details}");
         }
 
         $op_res = $client->wait_operation($op_name, 180, 3);
         if (is_wp_error($op_res)) {
+            if ($local_path !== '' && file_exists($local_path)) {
+                @unlink($local_path);
+            }
             $this->redirect_with_message('error', 'アップロード待機失敗: ' . $op_res->get_error_message());
         }
 
@@ -249,6 +260,9 @@ class Chatbot_Admin {
         if ($file_name === '') {
             // リモートIDを取得できない状態でローカル登録すると整合性が崩れるためエラー扱いにする。
             $details = wp_json_encode($op_res, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
+            if ($local_path !== '' && file_exists($local_path)) {
+                @unlink($local_path);
+            }
             $this->redirect_with_message(
                 'error',
                 "アップロードは完了しましたが、ドキュメントIDを取得できませんでした。\nOperation response:\n{$details}"
@@ -506,6 +520,7 @@ class Chatbot_Admin {
         }
         if (is_wp_error($res)) {
             $this->redirect_with_message('error', '削除失敗: ' . $res->get_error_message());
+            return;
         }
         // Best-effort: delete local uploaded file if path is stored.
         $local_path = isset($target['path']) ? (string) $target['path'] : '';
