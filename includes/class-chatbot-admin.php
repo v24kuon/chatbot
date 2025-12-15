@@ -434,16 +434,28 @@ class Chatbot_Admin {
 
         // 2) index不正時は、id/original で保存済みエントリを検索して特定
         if (!$target && is_array($files)) {
-            foreach ($files as $i => $f) {
+            foreach ($files as $f) {
                 if (!is_array($f)) {
                     continue;
                 }
                 $id_matches = ($req_file_id !== '' && ($f['id'] ?? '') === $req_file_id);
                 $orig_matches = ($req_file_original !== '' && ($f['original'] ?? '') === $req_file_original);
-                // どちらか一方でも指定され一致した場合に採用
-                if (($req_file_id !== '' && $id_matches) || ($req_file_original !== '' && $orig_matches)) {
-                    $target = $f;
-                    break;
+                // 削除フィルタと同じ条件で一致判定する
+                if (!empty($req_file_id) && !empty($req_file_original)) {
+                    if ($id_matches && $orig_matches) {
+                        $target = $f;
+                        break;
+                    }
+                } elseif (!empty($req_file_id)) {
+                    if ($id_matches) {
+                        $target = $f;
+                        break;
+                    }
+                } elseif (!empty($req_file_original)) {
+                    if ($orig_matches) {
+                        $target = $f;
+                        break;
+                    }
                 }
             }
         }
