@@ -219,17 +219,18 @@ class Chatbot_Admin {
         ];
         $file_name = '';
         foreach ($candidates as $cand) {
-            if (is_string($cand)) {
-                $cand = trim($cand);
-                if ($cand !== '') {
-                    $file_name = $cand;
-                    break;
-                }
+            if (!is_string($cand)) {
+                continue;
             }
-        }
-        if ($file_name !== '' && strpos($file_name, 'fileSearchStores/') !== 0 && strpos($file_name, 'files/') !== 0) {
-            // Avoid storing a local filename as a remote resource id.
-            $file_name = '';
+            $cand = trim($cand);
+            if ($cand === '') {
+                continue;
+            }
+            // リモートリソース名のみ採用
+            if (strpos($cand, 'fileSearchStores/') === 0 || strpos($cand, 'files/') === 0) {
+                $file_name = $cand;
+                break;
+            }
         }
 
         $files = get_option($this->option_files, []);
@@ -399,25 +400,47 @@ class Chatbot_Admin {
         $store = get_option($this->option_store, '');
 
         $file_index = isset($_POST['file_index']) ? intval($_POST['file_index']) : -1;
-        $file_id = isset($_POST['file_id']) ? sanitize_text_field(wp_unslash($_POST['file_id'])) : '';
-        $file_original = isset($_POST['file_original']) ? sanitize_text_field(wp_unslash($_POST['file_original'])) : '';
+        $req_file_id = isset($_POST['file_id']) ? sanitize_text_field(wp_unslash($_POST['file_id'])) : '';
+        $req_file_original = isset($_POST['file_original']) ? sanitize_text_field(wp_unslash($_POST['file_original'])) : '';
 
-        // Prefer the stored option entry (avoids tampering and supports legacy entries).
         $files = get_option($this->option_files, []);
+        $target = null;
+        $target_index = -1;
+
+        // 1) index指定が妥当なら優先採用し、整合性も確認
         if (is_array($files) && $file_index >= 0 && isset($files[$file_index]) && is_array($files[$file_index])) {
-            $stored_id = $files[$file_index]['id'] ?? '';
-            $stored_original = $files[$file_index]['original'] ?? '';
-            // 送信された値と保存値の整合性を検証し、改ざんを防ぐ
-            if ((!empty($file_id) && $stored_id !== $file_id) || (!empty($file_original) && $stored_original !== $file_original)) {
+            $stored = $files[$file_index];
+            $stored_id = $stored['id'] ?? '';
+            $stored_original = $stored['original'] ?? '';
+            if ((!empty($req_file_id) && $stored_id !== $req_file_id) || (!empty($req_file_original) && $stored_original !== $req_file_original)) {
                 $this->redirect_with_message('error', 'ファイル情報が一致しません。');
             }
-            $file_id = $stored_id ?: $file_id;
-            $file_original = $stored_original ?: $file_original;
+            $target = $stored;
+            $target_index = $file_index;
         }
 
-        if (empty($file_id) && empty($file_original)) {
-            $this->redirect_with_message('error', 'ファイル情報が不正です。');
+        // 2) index不正時は、id/original で保存済みエントリを検索して特定
+        if (!$target && is_array($files)) {
+            foreach ($files as $i => $f) {
+                if (!is_array($f)) {
+                    continue;
+                }
+                $id_matches = $req_file_id !== '' ? (($f['id'] ?? '') === $req_file_id) : true;
+                $orig_matches = $req_file_original !== '' ? (($f['original'] ?? '') === $req_file_original) : true;
+                if ($id_matches && $orig_matches) {
+                    $target = $f;
+                    $target_index = $i;
+                    break;
+                }
+            }
         }
+
+        if (!$target) {
+            $this->redirect_with_message('error', '対象のファイルが見つかりません。');
+        }
+
+        $file_id = $target['id'] ?? '';
+        $file_original = $target['original'] ?? '';
 
         $client = new Gemini_Client();
         // If we have a proper resource name, delete directly.
@@ -437,7 +460,6 @@ class Chatbot_Admin {
         // Remove from local list (by index when possible; fallback by id/original).
         if (is_array($files) && $file_index >= 0 && isset($files[$file_index])) {
             unset($files[$file_index]);
-            $files = array_values($files);
         } else {
             // id と original の両方が一致するもののみ削除（片方一致では削除しない）
             $files = array_filter($files, function ($f) use ($file_id, $file_original) {
@@ -458,9 +480,9 @@ class Chatbot_Admin {
                 }
                 return true; // ここには来ない想定
             });
-            $files = array_values($files);
         }
-        update_option($this->option_files, array_values($files), false);
+        $files = array_values($files);
+        update_option($this->option_files, $files, false);
         $this->redirect_with_message('success', 'ファイルを削除しました。');
     }
 
