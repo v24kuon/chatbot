@@ -561,15 +561,19 @@ class Chatbot_Admin {
         // ファイル削除ループにエラーハンドリングを追加
         $deleted_paths = [];
         foreach ($files as $file) {
-            if (!empty($file['id'])) {
-                $total_files++;
-                $res = $client->delete_file($file['id']);
-                if (is_wp_error($res)) {
-                    $errors[] = 'ファイル削除失敗 (' . ($file['original'] ?? $file['id']) . '): ' . $res->get_error_message();
-                } else {
-                    $deleted_count++;
-                    $deleted_paths[] = $file['path'] ?? '';
-                }
+            // If no remote ID is stored, we cannot delete remotely; clean local path later.
+            if (empty($file['id'])) {
+                $deleted_paths[] = $file['path'] ?? '';
+                continue;
+            }
+
+            $total_files++;
+            $res = $client->delete_file($file['id']);
+            if (is_wp_error($res)) {
+                $errors[] = 'ファイル削除失敗 (' . ($file['original'] ?? $file['id']) . '): ' . $res->get_error_message();
+            } else {
+                $deleted_count++;
+                $deleted_paths[] = $file['path'] ?? '';
             }
         }
 
