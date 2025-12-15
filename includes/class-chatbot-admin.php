@@ -602,9 +602,8 @@ class Chatbot_Admin {
             return;
         }
 
-        // On partial failure: still clean up local-only entries (no remote delete attempted)
-        // and paths already deleted remotely to avoid orphaned local files.
-        foreach (array_merge($local_only_paths, $deleted_paths) as $path) {
+        // On partial failure: clean up paths already deleted remotely to avoid orphaned local files.
+        foreach ($deleted_paths as $path) {
             $this->cleanup_local_file($path);
         }
         // Remove successfully deleted entries from DB; keep entries that failed or lacked IDs.
