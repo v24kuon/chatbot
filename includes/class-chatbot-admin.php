@@ -160,7 +160,7 @@ class Chatbot_Admin {
         if (!current_user_can('manage_options') || !check_admin_referer('chatbot_save_settings')) {
             wp_die('forbidden');
         }
-        $api = isset($_POST['api_key']) ? sanitize_text_field($_POST['api_key']) : '';
+        $api = isset($_POST['api_key']) ? sanitize_text_field(wp_unslash($_POST['api_key'])) : '';
         if (!empty($api)) {
             update_option($this->option_api_key, $api, false);
         }
@@ -390,9 +390,9 @@ class Chatbot_Admin {
         }
         global $wpdb;
         $table = $wpdb->prefix . 'manual_answers';
-        $store = isset($_POST['store_name']) ? sanitize_text_field($_POST['store_name']) : '';
-        $question = isset($_POST['question_pattern']) ? wp_kses_post($_POST['question_pattern']) : '';
-        $answer = isset($_POST['answer_text']) ? wp_kses_post($_POST['answer_text']) : '';
+        $store = isset($_POST['store_name']) ? sanitize_text_field(wp_unslash($_POST['store_name'])) : '';
+        $question = isset($_POST['question_pattern']) ? wp_kses_post(wp_unslash($_POST['question_pattern'])) : '';
+        $answer = isset($_POST['answer_text']) ? wp_kses_post(wp_unslash($_POST['answer_text'])) : '';
         $enabled = isset($_POST['enabled']) ? 1 : 0;
         if (empty($store) || empty($question) || empty($answer)) {
             $this->redirect_with_message('error', '入力を確認してください。');
