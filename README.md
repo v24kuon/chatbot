@@ -1,6 +1,6 @@
 # Gemini File Search Chatbot Plugin
 
-このプラグインは、WordPress 管理画面とウェブページに Google Gemini API（gemini-2.5-flash）ベースのチャットボットを追加するものです。管理画面でアップロードしたファイル（PDFや画像など）を Gemini File Search に保存し、その内容や手動 FAQ を参照しながら自然言語の質問に回答します。
+このプラグインは、WordPress 管理画面とウェブページに Google Gemini API（gemini-3.0-flash）ベースのチャットボットを追加するものです。管理画面でアップロードしたファイル（PDFや画像など）を Gemini File Search に保存し、その内容や手動 FAQ を参照しながら自然言語の質問に回答します。
 
 ## 主な特徴
 
@@ -17,7 +17,7 @@
 
 * WordPress 6.0 以上
 * PHP 7.4 以上
-* Google Cloud アカウントと Gemini API キー（gemini-2.5-flash へのアクセス権）
+* Google Cloud アカウントと Gemini API キー（gemini-3.0-flash へのアクセス権）
 
 ## インストール / 有効化
 
