@@ -202,14 +202,15 @@ class Chatbot_Frontend {
             return null;
         }
         if (!empty($selection['id'])) {
-            foreach ($candidates as $cand) {
-                if ((int)$cand['id'] === (int)$selection['id']) {
-                    return [
-                        'id' => (int)$cand['id'],
-                        'answer' => $cand['answer_text'],
-                        'latency' => $selection['latency_ms'] ?? null,
-                    ];
-                }
+            $indexed = array_column($candidates, null, 'id');
+            $id = (int) $selection['id'];
+            if (isset($indexed[$id])) {
+                $cand = $indexed[$id];
+                return [
+                    'id' => (int)$cand['id'],
+                    'answer' => $cand['answer_text'],
+                    'latency' => $selection['latency_ms'] ?? null,
+                ];
             }
         }
         return null;
