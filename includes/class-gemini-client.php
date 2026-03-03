@@ -6,7 +6,7 @@ if (!defined('ABSPATH')) {
 
 class Gemini_Client {
     const BASE_URL = 'https://generativelanguage.googleapis.com';
-    const MODEL_ID = 'gemini-3.0-flash';
+    const MODEL_ID = 'gemini-3-flash-preview';
 
     private $api_key;
 
