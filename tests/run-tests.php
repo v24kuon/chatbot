@@ -23,12 +23,13 @@ foreach ($test_files as $file) {
                 try {
                     $test_instance->setUp();
                     $test_instance->$method();
-                    $test_instance->tearDown();
                     echo "PASSED\n";
                 } catch (\Exception $e) {
                     echo "FAILED: " . $e->getMessage() . "\n";
                     echo $e->getTraceAsString() . "\n";
                     $failed = true;
+                } finally {
+                    $test_instance->tearDown();
                 }
             }
         }
